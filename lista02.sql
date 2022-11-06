@@ -411,14 +411,14 @@ FROM DUAL
 UNION ALL
 
 SELECT  'ZJADA RAZEM','','',
-        TO_CHAR(NVL(szefunio, 0)) szefunio,
-        TO_CHAR(NVL(bandzior, 0)) bandzior,
-        TO_CHAR(NVL(lowczy, 0)) lowczy,
-        TO_CHAR(NVL(lapacz, 0)) lapacz,
-        TO_CHAR(NVL(kot, 0)) kot,
-        TO_CHAR(NVL(milusia, 0)) milusia,
-        TO_CHAR(NVL(dzielczy, 0)) dzielczy,
-        TO_CHAR(NVL(suma, 0)) suma
+        TO_CHAR(NVL(szefunio, 0)),
+        TO_CHAR(NVL(bandzior, 0)),
+        TO_CHAR(NVL(lowczy, 0)),
+        TO_CHAR(NVL(lapacz, 0)),
+        TO_CHAR(NVL(kot, 0)),
+        TO_CHAR(NVL(milusia, 0)),
+        TO_CHAR(NVL(dzielczy, 0)),
+        TO_CHAR(NVL(suma, 0))
 FROM
 (
   SELECT      funkcja, przydzial_myszy + NVL(myszy_extra, 0) liczba
