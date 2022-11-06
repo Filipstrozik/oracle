@@ -1,0 +1,17 @@
+
+ALTER TABLE Kocury DISABLE CONSTRAINT funkcja_fk;
+ALTER TABLE Kocury DISABLE CONSTRAINT nr_bandny_fk;
+ALTER TABLE Kocury DISABLE CONSTRAINT szef_fk;
+DROP TABLE Kocury;
+
+ALTER TABLE Wrogowie_kocurow DISABLE CONSTRAINT pseudo_fk;
+DROP TABLE Wrogowie_kocurow;
+
+ALTER TABLE Kocury DISABLE CONSTRAINT ko_nr_ba_fk;
+ALTER TABLE Kocury DISABLE CONSTRAINT pseudo_fk;
+
+DROP TABLE Funkcje;
+
+DROP TABLE Bandy;
+
+DROP TABLE Wrogowie;
