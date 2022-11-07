@@ -138,38 +138,35 @@ HAVING
 --a)
 SELECT pseudo, NVL(przydzial_myszy,0) + NVL(myszy_extra,0) "ZJADA"
 FROM  Kocury K
-WHERE 12 > (SELECT COUNT(DISTINCT (przydzial_myszy + NVL(myszy_extra,0))) --ilosc kotow lepszych od kota w K,
+WHERE 12 > (SELECT COUNT(DISTINCT (NVL(przydzial_myszy,0) + NVL(myszy_extra,0))) --ilosc kotow lepszych od kota w K,
                 FROM Kocury
                 WHERE (NVL(K.przydzial_myszy,0) + NVL(K.myszy_extra,0)) < (NVL(przydzial_myszy,0) + NVL(myszy_extra,0))
                 )
 ORDER BY "ZJADA" DESC;
 
 --b)
-SELECT pseudo, NVL(przydzial_myszy,0) + NVL(myszy_extra,0) "Zjada"
+SELECT pseudo, NVL(przydzial_myszy,0) + NVL(myszy_extra,0) "ZJADA"
 FROM  Kocury K
 WHERE NVL(przydzial_myszy,0) + NVL(myszy_extra,0) IN (SELECT *
-                                                        FROM (  SELECT DISTINCT NVL(przydzial_myszy,0) + NVL(myszy_extra,0) "ZJADA"
+                                                        FROM (SELECT DISTINCT NVL(przydzial_myszy,0) + NVL(myszy_extra,0)
                                                                 FROM Kocury
-                                                                ORDER BY "ZJADA" DESC
-                                                            )
+                                                                ORDER BY 1 DESC)
                                                         WHERE ROWNUM<=12);
 
 --c)
 SELECT K1.pseudo, MIN(NVL(K1.przydzial_myszy,0) + NVL(K1.myszy_extra,0)) "ZJADA"
 FROM Kocury K1
-JOIN Kocury K2 ON NVL(K1.przydzial_myszy,0) + NVL(K1.myszy_extra,0) <= NVL(K2.przydzial_myszy,0) + NVL(K2.myszy_extra,0)
+JOIN Kocury K2 ON NVL(K1.przydzial_myszy,0) + NVL(K1.myszy_extra,0) <= NVL(K2.przydzial_myszy,0) + NVL(K2.myszy_extra,0) -- dolaczane wszystkie lepsze rowne kocury
 GROUP BY K1.pseudo
-HAVING COUNT(DISTINCT NVL(K2.przydzial_myszy,0) +NVL(K2.myszy_extra,0)) <= 12
+HAVING COUNT(DISTINCT NVL(K2.przydzial_myszy,0) +NVL(K2.myszy_extra,0)) <= 12 --ogranicz ilosc kocorw lepszych rownych
 ORDER BY "ZJADA" DESC;
 
 --d
 SELECT pseudo, "ZJADA"
 FROM (SELECT pseudo, (NVL(przydzial_myszy,0) + NVL(myszy_extra,0)) "ZJADA",
-             DENSE_RANK() over (ORDER BY NVL(przydzial_myszy,0) + NVL(myszy_extra,0) DESC )position
+             DENSE_RANK() over (ORDER BY NVL(przydzial_myszy,0) + NVL(myszy_extra,0) DESC ) position
       FROM KOCURY)
-WHERE position <= 12
-ORDER BY "ZJADA" DESC;
-
+WHERE position <= 12;
 
 
 --zad28
@@ -177,7 +174,7 @@ SELECT TO_CHAR(EXTRACT(YEAR FROM w_stadku_od)) "ROK", COUNT(pseudo) "LICZBA WSTA
 FROM Kocury
 GROUP BY EXTRACT(YEAR FROM w_stadku_od)
 HAVING COUNT(pseudo)  IN (
-    (SELECT * FROM (SELECT DISTINCT COUNT(pseudo)
+    (SELECT * FROM (SELECT DISTINCT COUNT(pseudo) -- wieksze niz srednia
                     FROM KOCURY
                     GROUP BY EXTRACT(YEAR FROM w_stadku_od)
                     HAVING COUNT(pseudo) >
@@ -185,8 +182,8 @@ HAVING COUNT(pseudo)  IN (
                             FROM KOCURY
                             GROUP BY EXTRACT(YEAR FROM W_STADKU_OD))
                     ORDER BY COUNT(pseudo))
-    WHERE ROWNUM=1),
-    (SELECT * FROM (SELECT DISTINCT COUNT(pseudo)
+    WHERE ROWNUM=1), -- pierwszy wiekszy
+    (SELECT * FROM (SELECT DISTINCT COUNT(pseudo) -- mmniejszy niz srednia malejaco
                     FROM KOCURY
                     GROUP BY EXTRACT(YEAR FROM w_stadku_od)
                     HAVING COUNT(pseudo) <
@@ -194,7 +191,7 @@ HAVING COUNT(pseudo)  IN (
                             FROM KOCURY
                             GROUP BY EXTRACT(YEAR FROM W_STADKU_OD))
                     ORDER BY COUNT(pseudo) DESC)
-    WHERE ROWNUM=1)
+    WHERE ROWNUM=1) -- pierwszy mniejszy
     )
 UNION ALL
 SELECT 'Srednia', ROUND(AVG(COUNT(pseudo)),7)
@@ -204,8 +201,7 @@ ORDER BY 2;
 
 --zad29
 --a ze zlaczeniem ale bez podzapytan
-SELECT K1.imie, MIN(K1.przydzial_myszy + NVL(K1.myszy_extra, 0)) "ZJADA", K1.nr_bandy, AVG(NVL(K2.przydzial_myszy,0) + NVL(K2.myszy_extra,0)) "SREDNIA BANDY"
---SELECT K1.nr_bandy, AVG(NVL(K1.przydzial_myszy,0) + NVL(myszy_extra,0))
+SELECT K1.imie, MIN(NVL(K1.przydzial_myszy,0) + NVL(K1.myszy_extra, 0)) "ZJADA", K1.nr_bandy, AVG(NVL(K2.przydzial_myszy,0) + NVL(K2.myszy_extra,0)) "SREDNIA BANDY"
 FROM Kocury K1
 JOIN Kocury K2
 ON K1.nr_bandy = K2.nr_bandy
@@ -213,8 +209,8 @@ WHERE K1.plec='M'
 GROUP BY K1.imie, K1.nr_bandy
 HAVING MIN(NVL(K1.przydzial_myszy,0) + NVL(K1.myszy_extra,0)) < AVG(NVL(K2.przydzial_myszy,0) + NVL(K2.myszy_extra,0));
 
---zad29b TODO 29 jak ma byc nazwana srednia
-SELECT  K1.imie, (K1.przydzial_myszy + NVL(K1.myszy_extra, 0)) "ZJADA" ,K1.nr_bandy, AVG "SREDNIA BANDY"
+--zad29b
+SELECT  K1.imie, NVL(K1.przydzial_myszy,0) + NVL(K1.myszy_extra, 0) "ZJADA" ,K1.nr_bandy, AVG "SREDNIA BANDY"
 FROM (SELECT nr_bandy nb, AVG(przydzial_myszy + NVL(myszy_extra,0)) "AVG"
         FROM Kocury
         GROUP BY nr_bandy)
@@ -432,9 +428,3 @@ FROM
   SELECT      SUM(NVL(przydzial_myszy,0) + NVL(myszy_extra, 0)) suma
   FROM        Kocury
 );
-
-
-
-
---testing
-
