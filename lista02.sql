@@ -176,7 +176,7 @@ SELECT TO_CHAR(EXTRACT(YEAR FROM w_stadku_od)) "ROK", COUNT(pseudo) "LICZBA WSTA
 FROM Kocury
 GROUP BY EXTRACT(YEAR FROM w_stadku_od)
 HAVING COUNT(pseudo)  IN (
-    (SELECT * FROM (SELECT DISTINCT COUNT(pseudo) -- mmniejszy niz srednia malejaco --popraw zlozonosc
+    (SELECT MAX(mniejsze) FROM (SELECT DISTINCT COUNT(pseudo) mniejsze -- mmniejszy niz srednia malejaco --popraw zlozonosc
                     FROM KOCURY
                     GROUP BY EXTRACT(YEAR FROM w_stadku_od)
                     HAVING COUNT(pseudo) <
@@ -184,8 +184,8 @@ HAVING COUNT(pseudo)  IN (
                             FROM KOCURY
                             GROUP BY EXTRACT(YEAR FROM W_STADKU_OD))
                     ORDER BY COUNT(pseudo) DESC)
-    WHERE ROWNUM=1), -- pierwszy mniejszy
-    (SELECT * FROM (SELECT DISTINCT COUNT(pseudo) -- wieksze niz srednia
+    ), -- pierwszy mniejszy
+    (SELECT MIN(wieksze) FROM (SELECT DISTINCT COUNT(pseudo) wieksze -- wieksze niz srednia
                     FROM KOCURY
                     GROUP BY EXTRACT(YEAR FROM w_stadku_od)
                     HAVING COUNT(pseudo) >
@@ -193,7 +193,7 @@ HAVING COUNT(pseudo)  IN (
                             FROM KOCURY
                             GROUP BY EXTRACT(YEAR FROM W_STADKU_OD))
                     ORDER BY COUNT(pseudo))
-    WHERE ROWNUM=1) -- pierwszy wiekszy
+    ) -- pierwszy wiekszy
     )
 UNION ALL
 SELECT 'Srednia', ROUND(AVG(COUNT(pseudo)),7)
@@ -439,3 +439,44 @@ FROM
 
 
 --pseudokolumen
+SELECT AVG(PRZYDZIAL_MYSZY)
+from KOCURY left join WROGOWIE_KOCUROW WK on KOCURY.PSEUDO = WK.PSEUDO
+where PLEC = 'M' AND IMIE_WROGA is null and NR_BANDY in (SELECT NR_BANDY  from KOCURY group by NR_BANDY having avg(PRZYDZIAL_MYSZY)>=40 );
+
+
+SELECT K.plec, MAX(K.PRZYDZIAL_MYSZY), COUNT(K.PSEUDO)-COUNT(K.MYSZY_EXTRA)
+FROM KOCURY K
+where NR_BANDY IN (
+    (SELECT NR_BANDY
+     FROM KOCURY
+     WHERE PSEUDO IN ('PLACEK','RURA'))
+   )
+OR NR_BANDY IN (
+     SELECT NR_BANDY
+     FROM KOCURY
+     GROUP BY NR_BANDY
+     HAVING AVG(PRZYDZIAL_MYSZY)>40)
+    AND 0.1 < (SELECT MIN(PRZYDZIAL_MYSZY)
+               FROM KOCURY
+               WHERE NR_BANDY = K.NR_BANDY) / K.PRZYDZIAL_MYSZY
+GROUP BY K.plec;
+
+SELECT K.PSEUDO, K.NR_BANDY
+FROM KOCURY K LEFT JOIN WROGOWIE_KOCUROW WK on K.PSEUDO = WK.PSEUDO
+WHERE
+    K.PLEC = 'M'
+    AND WK.PSEUDO IS NULL
+    AND K.NR_BANDY IN (SELECT NR_BANDY
+                     FROM KOCURY
+                     WHERE PLEC = 'M'
+                     GROUP BY NR_BANDY
+                     HAVING AVG(PRZYDZIAL_MYSZY) > 55)
+
+SELECT KOCURY.NR_BANDY
+FROM KOCURY JOIN BANDY B on KOCURY.NR_BANDY = B.NR_BANDY
+WHERE KOCURY.NR_BANDY IN (SELECT NR_BANDY
+                          FROM KOCURY
+                          GROUP BY NR_BANDY
+                          HAVING COUNT(PSEUDO)>4)
+
+
