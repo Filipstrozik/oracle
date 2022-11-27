@@ -247,9 +247,105 @@ EXECUTE AddBanda(1, 'PUSZYSCI', 'POLE');
 EXECUTE AddBanda(2, 'CZARNI RYCERZE', 'POLE');
 EXECUTE AddBanda(1, 'SZEFOSTWO', 'NOWE');
 EXECUTE AddBanda(10, 'NOWI', 'NOWE');
-SELECT *
-FROM bandy;
+SELECT * FROM bandy;
 
 ROLLBACK;
 
 
+CREATE OR REPLACE TRIGGER BiggerThenLastNumber
+    BEFORE INSERT 
+    ON BANDY
+    FOR EACH ROW
+DECLARE
+    ostatni_nr BANDY.NR_BANDY%TYPE;
+BEGIN
+    SELECT MAX(NR_BANDY)
+    INTO ostatni_nr
+    FROM BANDY;
+    IF ostatni_nr + 1 <> :NEW.NR_BANDY THEN
+        :NEW.NR_BANDY := ostatni_nr + 1;
+    END IF;
+END;
+
+
+
+
+EXECUTE AddBanda(10, 'NOWI', 'NOWE');
+
+SELECT * FROM bandy;
+
+ROLLBACK;
+
+--zad42
+--rozwiazanie compound
+CREATE OR REPLACE TRIGGER trg_wirus_comp
+    FOR UPDATE OF PRZYDZIAL_MYSZY
+    ON KOCURY
+    COMPOUND TRIGGER
+    przydzial_tygrysa KOCURY.PRZYDZIAL_MYSZY%TYPE;
+    ekstra KOCURY.MYSZY_EXTRA%TYPE;
+    kara NUMBER:=0;
+    nagroda NUMBER:=0;
+    
+BEFORE STATEMENT IS
+BEGIN
+    SELECT przydzial_myszy INTO przydzial_tygrysa
+    FROM KOCURY
+    WHERE pseudo = 'TYGRYS';
+END BEFORE STATEMENT;
+
+BEFORE EACH ROW IS
+BEGIN
+    IF :NEW.funkcja = 'MILUSIA' THEN
+        IF :NEW.przydzial_myszy <= :OLD.przydzial_myszy THEN
+            DBMS_OUTPUT.PUT_LINE('brak zmiany');
+            :NEW.PRZYDZIAL_MYSZY := :OLD.PRZYDZIAL_MYSZY;
+        ELSIF :NEW.przydzial_myszy - :OLD.przydzial_myszy < 0.1 * przydzial_tygrysa THEN
+            DBMS_OUTPUT.PUT_LINE('podwyzka mniejsza niz 10% Tygrysa');
+            :NEW.przydzial_myszy := :NEW.przydzial_myszy + ROUND(0.1 * przydzial_tygrysa);
+            :NEW.myszy_extra := NVL(:NEW.myszy_extra, 0) + 5;
+            kara := kara + ROUND(0.1 * przydzial_tygrysa);
+        ELSE
+            nagroda := nagroda + 5;
+        END IF;
+    END IF;
+END BEFORE EACH ROW;
+
+AFTER STATEMENT IS
+BEGIN
+    SELECT myszy_extra INTO ekstra
+    FROM KOCURY
+    WHERE pseudo = 'TYGRYS';
+    przydzial_tygrysa := przydzial_tygrysa - kara;
+    ekstra := ekstra + nagroda;
+    IF kara <> 0 AND nagroda <> 0 THEN
+        DBMS_OUTPUT.PUT_LINE('Nowy przydzial Tygrysa: ' || przydzial_tygrysa);
+        DBMS_OUTPUT.PUT_LINE('Nowe myszy ekstra Tygrysa: ' || ekstra);
+        kara := 0;
+        nagroda := 0;
+        UPDATE KOCURY
+        SET przydzial_myszy = przydzial_tygrysa,
+            myszy_extra = ekstra
+        WHERE pseudo = 'TYGRYS';
+    END IF;
+END AFTER STATEMENT;
+END;
+
+UPDATE KOCURY
+SET PRZYDZIAL_MYSZY = 50
+WHERE PSEUDO = 'PUSZYSTA';
+
+UPDATE Kocury
+SET przydzial_myszy = przydzial_myszy + 1
+WHERE funkcja = 'MILUSIA';
+
+UPDATE Kocury
+SET przydzial_myszy = przydzial_myszy + 20
+WHERE funkcja = 'MILUSIA';
+
+SELECT *
+FROM KOCURY
+WHERE PSEUDO IN ('PUSZYSTA', 'TYGRYS');
+
+ROLLBACK;
+DROP TRIGGER trg_wirus_comp;
