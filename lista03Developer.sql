@@ -277,6 +277,91 @@ SELECT * FROM bandy;
 ROLLBACK;
 
 --zad42
+-- 1. rozwiazanie -> kilka wyzwalaczy + pakiet
+CREATE OR REPLACE PACKAGE wirus IS
+    kara NUMBER := 0;
+    nagroda NUMBER := 0;
+    przydzial_tygrysa KOCURY.PRZYDZIAL_MYSZY%TYPE;
+END;
+
+CREATE OR REPLACE TRIGGER trg_wirus_bef_update
+    BEFORE UPDATE OF PRZYDZIAL_MYSZY
+    ON KOCURY
+DECLARE
+BEGIN
+    SELECT PRZYDZIAL_MYSZY INTO wirus.przydzial_tygrysa FROM KOCURY WHERE pseudo = 'TYGRYS';
+END;
+
+CREATE OR REPLACE TRIGGER trg_wirus_bef_update_row
+    BEFORE UPDATE OF PRZYDZIAL_MYSZY
+    ON KOCURY
+    FOR EACH ROW
+DECLARE
+BEGIN
+    IF :NEW.funkcja = 'MILUSIA' THEN
+        IF :NEW.przydzial_myszy <= :OLD.przydzial_myszy THEN
+            DBMS_OUTPUT.PUT_LINE('brak zmiany');
+            :NEW.PRZYDZIAL_MYSZY := :OLD.PRZYDZIAL_MYSZY;
+        ELSIF :NEW.przydzial_myszy - :OLD.przydzial_myszy < 0.1 * wirus.przydzial_tygrysa THEN
+            DBMS_OUTPUT.PUT_LINE('podwyzka mniejsza niz 10% Tygrysa');
+            :NEW.przydzial_myszy := :NEW.przydzial_myszy + ROUND(0.1 * wirus.przydzial_tygrysa);
+            :NEW.myszy_extra := NVL(:NEW.myszy_extra, 0) + 5;
+            wirus.kara := wirus.kara + ROUND(0.1 * wirus.przydzial_tygrysa);
+        ELSE
+            wirus.nagroda := wirus.nagroda + 5;
+        END IF;
+    END IF;
+END;
+
+CREATE OR REPLACE TRIGGER trg_wirus_aft_update
+    AFTER UPDATE OF PRZYDZIAL_MYSZY
+    ON KOCURY
+DECLARE
+    przydzial KOCURY.PRZYDZIAL_MYSZY%TYPE;
+    ekstra    KOCURY.MYSZY_EXTRA%TYPE;
+BEGIN
+    SELECT PRZYDZIAL_MYSZY, MYSZY_EXTRA
+    INTO przydzial, ekstra
+    FROM KOCURY
+    WHERE pseudo = 'TYGRYS';
+    
+    przydzial := przydzial - wirus.kara;
+    ekstra := ekstra + wirus.nagroda;
+    
+    IF wirus.kara <> 0 OR wirus.nagroda <> 0 THEN
+        wirus.kara := 0;
+        wirus.nagroda := 0;
+        UPDATE KOCURY
+        SET PRZYDZIAL_MYSZY = przydzial,
+            MYSZY_EXTRA     = ekstra
+        WHERE pseudo = 'TYGRYS';
+    END IF;
+END;
+
+UPDATE KOCURY
+SET PRZYDZIAL_MYSZY = 50
+WHERE PSEUDO = 'PUSZYSTA';
+
+UPDATE Kocury
+SET przydzial_myszy = przydzial_myszy + 1
+WHERE funkcja = 'MILUSIA';
+
+UPDATE Kocury
+SET przydzial_myszy = przydzial_myszy + 20
+WHERE funkcja = 'MILUSIA';
+
+SELECT *
+FROM KOCURY
+WHERE PSEUDO IN ('PUSZYSTA', 'TYGRYS');
+
+ROLLBACK;
+
+DROP TRIGGER TRG_WIRUS_AFT_UPDATE;
+DROP TRIGGER TRG_WIRUS_BEF_UPDATE;
+DROP TRIGGER TRG_WIRUS_BEF_UPDATE_ROW;
+DROP PACKAGE WIRUS;
+
+
 --rozwiazanie compound
 CREATE OR REPLACE TRIGGER trg_wirus_comp
     FOR UPDATE OF PRZYDZIAL_MYSZY
@@ -349,3 +434,90 @@ WHERE PSEUDO IN ('PUSZYSTA', 'TYGRYS');
 
 ROLLBACK;
 DROP TRIGGER trg_wirus_comp;
+
+--zad43
+SELECT DISTINCT FUNKCJA
+FROM KOCURY;
+
+SELECT funkcja
+FROM FUNKCJE;
+
+DECLARE 
+    CURSOR funkcje IS SELECT DISTINCT FUNKCJA
+                        FROM KOCURY;
+    CURSOR iloscKotow IS SELECT COUNT(pseudo) ilosc, SUM(NVL(PRZYDZIAL_MYSZY, 0) + NVL(MYSZY_EXTRA, 0)) sumaMyszy
+                        FROM Kocury, Bandy WHERE Kocury.nr_bandy = Bandy.nr_bandy
+                        GROUP BY Bandy.nazwa, Kocury.plec
+                        ORDER BY Bandy.nazwa, plec;
+    CURSOR funkcjezBand IS SELECT SUM(NVL(Kocury.PRZYDZIAL_MYSZY, 0) + NVL(Kocury.MYSZY_EXTRA, 0)) sumaMyszy,
+                                Kocury.Funkcja funkcja,
+                                Bandy.nazwa naz,
+                                Kocury.plec pl
+                            FROM Kocury, Bandy WHERE Kocury.nr_bandy = Bandy.nr_bandy
+                            GROUP BY Bandy.nazwa, Kocury.plec, Kocury.funkcja
+                            ORDER BY Bandy.nazwa, Kocury.plec, Kocury.funkcja;
+    ilosc NUMBER;
+    il iloscKotow%ROWTYPE;
+    bpf funkcjezBand%ROWTYPE;
+BEGIN
+    DBMS_OUTPUT.put('NAZWA BANDY       PLEC    ILE ');
+    FOR fun IN funkcje
+        LOOP
+            DBMS_OUTPUT.put(RPAD(fun.funkcja, 10));
+        END LOOP;
+    DBMS_OUTPUT.put_line('    SUMA');
+    DBMS_OUTPUT.put('---------------- ------ ----');
+    FOR fun IN funkcje
+        LOOP
+            DBMS_OUTPUT.put(' ---------');
+        END LOOP;
+    
+    DBMS_OUTPUT.put_line(' --------');
+    
+    OPEN funkcjezBand;
+    OPEN iloscKotow;
+    FETCH funkcjezBand INTO bpf;
+    FOR banda IN (SELECT nazwa, NR_BANDY FROM BANDY WHERE nazwa <> 'ROCKERSI' ORDER BY nazwa)
+        LOOP
+            FOR ple IN (SELECT PLEC FROM KOCURY GROUP BY PLEC ORDER BY PLEC )
+                LOOP 
+                    DBMS_OUTPUT.put(CASE WHEN ple.plec = 'M' THEN RPAD(' ', 18) ELSE RPAD(banda.nazwa, 18) END);
+                    DBMS_OUTPUT.put(CASE WHEN ple.plec = 'M' THEN 'Kocor' ELSE 'Kotka' END);
+                    
+                    FETCH iloscKotow INTO il;
+                    DBMS_OUTPUT.put(LPAD(il.ilosc, 4));
+                    FOR fun IN funkcje
+                        LOOP
+                            IF fun.funkcja = bpf.funkcja AND banda.nazwa = bpf.naz AND ple.plec = bpf.pl
+                            THEN 
+                                DBMS_OUTPUT.put(LPAD(NVL(bpf.sumaMyszy, 0), 10));
+                                FETCH funkcjezBand INTO bpf;
+                            ELSE
+                                DBMS_OUTPUT.put(LPAD(NVL(0, 0), 10));
+                            END IF;
+                        END LOOP;
+                    DBMS_OUTPUT.put(LPAD(NVL(il.sumaMyszy, 0), 10));
+                    DBMS_OUTPUT.new_line();
+                END LOOP;
+        END LOOP;
+    CLOSE iloscKotow;
+    CLOSE funkcjezBand;
+    DBMS_OUTPUT.put('Z---------------- ------ ----');
+    FOR fun IN funkcje
+        LOOP
+            DBMS_OUTPUT.put(' ---------');
+        END LOOP;
+    DBMS_OUTPUT.put_line(' --------');
+    DBMS_OUTPUT.put('Zjada razem                ');
+    FOR fun IN funkcje
+        LOOP
+            SELECT SUM(NVL(PRZYDZIAL_MYSZY, 0) + NVL(MYSZY_EXTRA, 0))
+            INTO ilosc
+            FROM Kocury K
+            WHERE K.FUNKCJA = fun.FUNKCJA;
+            DBMS_OUTPUT.put(LPAD(NVL(ilosc, 0), 10));
+        END LOOP;
+    SELECT SUM(nvl(PRZYDZIAL_MYSZY, 0) + nvl(MYSZY_EXTRA, 0)) INTO ilosc FROM Kocury;
+    DBMS_OUTPUT.put(LPAD(ilosc, 10));
+    DBMS_OUTPUT.new_line();
+END;
