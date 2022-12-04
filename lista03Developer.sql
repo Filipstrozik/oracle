@@ -5,10 +5,12 @@ BEGIN
     SELECT FUNKCJA INTO funkcja_kocura
     FROM KOCURY
     WHERE FUNKCJA = UPPER('&nazwa_funkcji');
-DBMS_OUTPUT.PUT_LINE('Znaleziono kota o funkcji: ' || funkcja_kocura);
+    DBMS_OUTPUT.PUT_LINE('Znaleziono kota o funkcji: ' || funkcja_kocura);
 EXCEPTION
-    WHEN TOO_MANY_ROWS THEN DBMS_OUTPUT.PUT_LINE('znaleziono');
-    WHEN NO_DATA_FOUND THEN DBMS_OUTPUT.PUT_LINE('NIE znaleziono');
+    WHEN TOO_MANY_ROWS 
+        THEN DBMS_OUTPUT.PUT_LINE('znaleziono');
+    WHEN NO_DATA_FOUND 
+        THEN DBMS_OUTPUT.PUT_LINE('NIE znaleziono');
 END;
 
 --35
@@ -22,21 +24,19 @@ BEGIN
     INTO imie_kocura, pzydzial_kocura, miesiac_kocura
     FROM KOCURY
     WHERE PSEUDO = UPPER('&pseudonim');
-    
-    IF pzydzial_kocura > 700 THEN 
-        DBMS_OUTPUT.PUT_LINE('calkowity roczny przydzial myszy >700');
+    IF pzydzial_kocura > 700 
+        THEN DBMS_OUTPUT.PUT_LINE('calkowity roczny przydzial myszy >700');
     ELSIF imie_kocura LIKE '%A%'
         THEN DBMS_OUTPUT.PUT_LINE('imiê zawiera litere A');
-    ELSIF miesiac_kocura = 11 
+    ELSIF miesiac_kocura = 5 
         THEN DBMS_OUTPUT.PUT_LINE('listopad jest miesiacem przystapienia do stada');
     ELSE DBMS_OUTPUT.PUT_LINE('nie odpowiada kryteriom');
     END IF;
-    END IF;
-    END IF;
-
-    EXCEPTION
-        WHEN NO_DATA_FOUND THEN DBMS_OUTPUT.PUT_LINE('BRAK TAKIEGO KOTA');
-        WHEN OTHERS THEN DBMS_OUTPUT.PUT_LINE(sqlerrm);
+EXCEPTION 
+    WHEN NO_DATA_FOUND
+        THEN DBMS_OUTPUT.PUT_LINE('BRAK TAKIEGO KOTA');
+    WHEN OTHERS 
+        THEN DBMS_OUTPUT.PUT_LINE(sqlerrm);
 END;
 
 --zad36
@@ -45,7 +45,7 @@ DECLARE
         SELECT PSEUDO, NVL(PRZYDZIAL_MYSZY,0) zjada, Funkcje.MAX_MYSZY maks
         FROM KOCURY JOIN FUNKCJE ON KOCURY.FUNKCJA = FUNKCJE.FUNKCJA
         ORDER BY 2
-    FOR UPDATE OF PRZYDZIAL_MYSZY;
+        FOR UPDATE OF PRZYDZIAL_MYSZY;
     zmiany NUMBER:=0;
     suma NUMBER:=0;
     kot kolejka%ROWTYPE;
@@ -654,7 +654,7 @@ CREATE OR REPLACE TRIGGER trg_monitor_wykroczenia
 DECLARE
     min_mysz FUNKCJE.MIN_MYSZY%TYPE;
     max_mysz FUNKCJE.MAX_MYSZY%TYPE;
-    poza EXCEPTION;
+    --poza EXCEPTION;
     curr_data DATE DEFAULT SYSDATE;
     zdarzenie VARCHAR2(20);
     PRAGMA AUTONOMOUS_TRANSACTION;
