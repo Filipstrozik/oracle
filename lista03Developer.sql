@@ -71,8 +71,7 @@ BEGIN
                 zmiany := zmiany + 1;
             END IF;
         END LOOP;
-    DBMS_OUTPUT.PUT_LINE(
-                'Calk. przydzial w stadku - ' || TO_CHAR(suma) || ' Zmian - ' || TO_CHAR(zmiany));
+    DBMS_OUTPUT.PUT_LINE('Calk. przydzial w stadku - ' || TO_CHAR(suma) || ' Zmian - ' || TO_CHAR(zmiany));
     CLOSE kolejka;
 END;
 
@@ -600,11 +599,11 @@ SELECT * FROM DODATKI_EXTRA;
 /*Transakcja taka jest niezale¿n¹ transakcj¹, osadzon¹ w 
 transakcji g³ównej, wykonywan¹ w trakcie zawieszonej transakcji 
 g³ównej. Po jej zakoñczeniu transakcja g³ówna jest kontynuowana. 
-Transakcja autonomiczna musi byæ zawsze zakoñczona
+Transakcja autonomiczna musi byæ zawsze zakoñczona lub wycofana.
 Dzieki temu mimo wycofania zmian na przydzialach myszy w kocurach
 nie wycofamy kary w dodatkach extra;
-EXECUTE IMMEDIATE - wewn. dyn. SQL DDL które jest zabrobione w wyzwalaczach a jednak mo¿na ;)
-problem taki,¿e tutaj nie ma DDL.
+EXECUTE IMMEDIATE - wewn. dyn. SQL DDL które jest zabrobione w wyzwalaczach.
+Dziêki pragma autonomous_transaction mo¿na wykonaæ zabroniony w blokach DCL - COMMIT
 */
 CREATE OR REPLACE TRIGGER trg_tygrys_kara
     BEFORE UPDATE OF PRZYDZIAL_MYSZY
@@ -667,7 +666,7 @@ DROP TABLE Proby_wykroczenia;
 
 --wyzwalacz. CO TO PRAGMA AUTONOMOUS_TRANSACTION? - 
 -- po co commit?
-CREATE OR REPLACE TRIGGER trg_monitor_wykroczenia
+CREATE OR REPLACE TRIGGER trg_monitor_wykroczenia_other
     BEFORE INSERT OR UPDATE OF PRZYDZIAL_MYSZY
     ON KOCURY
     FOR EACH ROW
@@ -695,9 +694,9 @@ EXCEPTION
         :NEW.PRZYDZIAL_MYSZY := :OLD.PRZYDZIAL_MYSZY;
 END;
 
+DROP TRIGGER trg_monitor_wykroczenia_other;
 
-
-CREATE OR REPLACE TRIGGER trg_monitor_wykroczenia2
+CREATE OR REPLACE TRIGGER trg_monitor_wykroczenia
     BEFORE INSERT OR UPDATE OF PRZYDZIAL_MYSZY
     ON KOCURY
     FOR EACH ROW
@@ -735,4 +734,4 @@ ROLLBACK;
 TRUNCATE TABLE Proby_wykroczenia;
 
 DROP TABLE Proby_wykroczenia;
-DROP TRIGGER trg_monitor_wykroczenia;
+
