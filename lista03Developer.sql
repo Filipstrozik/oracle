@@ -39,7 +39,7 @@ EXCEPTION
         THEN DBMS_OUTPUT.PUT_LINE(sqlerrm);
 END;
 
---zad36
+--zad36 TODO zablokowac przed updateowaniem
 DECLARE 
     CURSOR kolejka IS
         SELECT PSEUDO, NVL(PRZYDZIAL_MYSZY,0) zjada, Funkcje.MAX_MYSZY maks
@@ -325,7 +325,7 @@ SELECT * FROM bandy;
 ROLLBACK;
 
 --zad42
--- 1. rozwiazanie -> kilka wyzwalaczy + pakiet
+--kilka wyzwalaczy + pakiet
 CREATE OR REPLACE PACKAGE wirus IS
     kara NUMBER := 0;
     nagroda NUMBER := 0;
@@ -490,9 +490,16 @@ FROM KOCURY;
 SELECT funkcja
 FROM FUNKCJE;
 
+SELECT funkcja, SUM(NVL(PRZYDZIAL_MYSZY, 0) + NVL(MYSZY_EXTRA, 0))
+FROM KOCURY
+GROUP BY funkcja;
+
+
+--zad43 polecenie
 DECLARE 
-    CURSOR funkcje IS SELECT DISTINCT FUNKCJA
-                        FROM KOCURY;
+    CURSOR funkcje IS SELECT funkcja, SUM(NVL(PRZYDZIAL_MYSZY, 0) + NVL(MYSZY_EXTRA, 0)) suma_dla_funkcji
+                        FROM KOCURY
+                        GROUP BY funkcja;
     CURSOR iloscKotow IS SELECT COUNT(pseudo) ilosc, SUM(NVL(PRZYDZIAL_MYSZY, 0) + NVL(MYSZY_EXTRA, 0)) sumaMyszy
                         FROM Kocury, Bandy WHERE Kocury.nr_bandy = Bandy.nr_bandy
                         GROUP BY Bandy.nazwa, Kocury.plec
@@ -505,6 +512,7 @@ DECLARE
                             GROUP BY Bandy.nazwa, Kocury.plec, Kocury.funkcja
                             ORDER BY Bandy.nazwa, Kocury.plec, Kocury.funkcja;
     ilosc NUMBER;
+    suma NUMBER;
     il iloscKotow%ROWTYPE;
     bpf funkcjezBand%ROWTYPE;
 BEGIN
@@ -525,9 +533,9 @@ BEGIN
     OPEN funkcjezBand;
     OPEN iloscKotow;
     FETCH funkcjezBand INTO bpf;
-    FOR banda IN (SELECT nazwa, NR_BANDY FROM BANDY WHERE nazwa <> 'ROCKERSI' ORDER BY nazwa)
+    FOR banda IN (SELECT nazwa, NR_BANDY FROM BANDY WHERE nazwa <> 'ROCKERSI' ORDER BY nazwa) -- zastanow sie
         LOOP
-            FOR ple IN (SELECT PLEC FROM KOCURY GROUP BY PLEC ORDER BY PLEC )
+            FOR ple IN (SELECT PLEC FROM KOCURY GROUP BY PLEC ORDER BY PLEC ) -- stinky cheese
                 LOOP 
                     DBMS_OUTPUT.put(CASE WHEN ple.plec = 'M' THEN RPAD(' ', 18) ELSE RPAD(banda.nazwa, 18) END);
                     DBMS_OUTPUT.put(CASE WHEN ple.plec = 'M' THEN 'Kocor' ELSE 'Kotka' END);
@@ -558,15 +566,11 @@ BEGIN
     DBMS_OUTPUT.put_line(' --------');
     DBMS_OUTPUT.put('Zjada razem                ');
     FOR fun IN funkcje
-        LOOP
-            SELECT SUM(NVL(PRZYDZIAL_MYSZY, 0) + NVL(MYSZY_EXTRA, 0))
-            INTO ilosc
-            FROM Kocury K
-            WHERE K.FUNKCJA = fun.FUNKCJA;
-            DBMS_OUTPUT.put(LPAD(NVL(ilosc, 0), 10));
+        LOOP            
+            DBMS_OUTPUT.put(LPAD(NVL(fun.suma_dla_funkcji, 0), 10));
         END LOOP;
-    SELECT SUM(nvl(PRZYDZIAL_MYSZY, 0) + nvl(MYSZY_EXTRA, 0)) INTO ilosc FROM Kocury;
-    DBMS_OUTPUT.put(LPAD(ilosc, 10));
+    SELECT SUM(nvl(PRZYDZIAL_MYSZY, 0) + nvl(MYSZY_EXTRA, 0)) INTO suma FROM Kocury;
+    DBMS_OUTPUT.put(LPAD(suma, 10));
     DBMS_OUTPUT.new_line();
 END;
 
@@ -581,39 +585,54 @@ SELECT * FROM Dodatki_extra;
 
 DROP TABLE Dodatki_extra;
 
+SELECT PSEUDO, (SELECT COUNT(*) FROM DODATKI_EXTRA WHERE KOCURY.PSEUDO = milusia.PSEUDO) ile
+FROM KOCURY
+WHERE funkcja = 'MILUSIA';
 
---45 sprawdz to
+SELECT *
+FROM Kocury
+WHERE funkcja = 'MILUSIA';
+
+SELECT * FROM DODATKI_EXTRA;
+
+
+--45 Pragma autonomous_transaction: 
+/*Transakcja taka jest niezale¿n¹ transakcj¹, osadzon¹ w 
+transakcji g³ównej, wykonywan¹ w trakcie zawieszonej transakcji 
+g³ównej. Po jej zakoñczeniu transakcja g³ówna jest kontynuowana. 
+Transakcja autonomiczna musi byæ zawsze zakoñczona
+Dzieki temu mimo wycofania zmian na przydzialach myszy w kocurach
+nie wycofamy kary w dodatkach extra;
+EXECUTE IMMEDIATE - wewn. dyn. SQL DDL które jest zabrobione w wyzwalaczach a jednak mo¿na ;)
+problem taki,¿e tutaj nie ma DDL.
+*/
 CREATE OR REPLACE TRIGGER trg_tygrys_kara
     BEFORE UPDATE OF PRZYDZIAL_MYSZY
     ON KOCURY
     FOR EACH ROW
 DECLARE
+    CURSOR milusie IS SELECT PSEUDO
+                FROM KOCURY
+                WHERE funkcja = 'MILUSIA';
+    ILE NUMBER;
+    POLECENIE VARCHAR2(100);
     PRAGMA AUTONOMOUS_TRANSACTION;
 BEGIN
     IF LOGIN_USER <> 'TYGRYS' AND :NEW.PRZYDZIAL_MYSZY > :OLD.PRZYDZIAL_MYSZY AND :NEW.FUNKCJA = 'MILUSIA' THEN
-        EXECUTE IMMEDIATE
-            'DECLARE
-                ILE NUMBER;
-                DOD NUMBER;
-                CURSOR milusie IS SELECT PSEUDO
-                FROM KOCURY
-                WHERE funkcja = ''MILUSIA'';
-            BEGIN
-            FOR milusia IN milusie
-                LOOP
-                SELECT COUNT(*) INTO ILE FROM DODATKI_EXTRA WHERE PSEUDO = milusia.PSEUDO;
-                IF ILE = 0 THEN
-                    INSERT INTO DODATKI_EXTRA(PSEUDO, DOD_EXTRA) VALUES(milusia.PSEUDO, -10);
-                    ELSE
-                        SELECT DOD_EXTRA INTO DOD FROM DODATKI_EXTRA WHERE PSEUDO = milusia.PSEUDO;
-                        UPDATE DODATKI_EXTRA SET DOD_EXTRA = DOD - 10 WHERE PSEUDO = milusia.PSEUDO;
-                    END IF;
-                END LOOP;
-            END;';
-
+    FOR milusia IN milusie
+        LOOP
+            SELECT COUNT(*) INTO ILE FROM DODATKI_EXTRA WHERE pseudo = milusia.pseudo;
+            IF ILE > 0 THEN
+                POLECENIE := 'UPDATE DODATKI_EXTRA SET dod_extra = dod_extra - 10 WHERE milusia.pseudo = pseudo;';
+            ELSE 
+                POLECENIE := 'INSERT INTO DODATKI_EXTRA(PSEUDO, DOD_EXTRA) VALUES(milusia.PSEUDO, -10);';
+            END IF;
+            EXECUTE IMMEDIATE POLECENIE;
+        END LOOP;
         COMMIT;
     END IF;
 END;
+
 
 UPDATE KOCURY
 SET PRZYDZIAL_MYSZY = 100
@@ -638,7 +657,7 @@ DROP TRIGGER trg_tygrys_kara;
 --tabela
 CREATE TABLE Proby_wykroczenia 
 (
-    kto VARCHAR2(15) NOT NULL, --klucz obcy?
+    kto VARCHAR2(15) NOT NULL, 
     kiedy DATE NOT NULL,
     jakiemu VARCHAR2(15) NOT NULL,
     operacja VARCHAR2(15) NOT NULL
@@ -646,7 +665,8 @@ CREATE TABLE Proby_wykroczenia
 
 DROP TABLE Proby_wykroczenia;
 
---wyzwalacz
+--wyzwalacz. CO TO PRAGMA AUTONOMOUS_TRANSACTION? - 
+-- po co commit?
 CREATE OR REPLACE TRIGGER trg_monitor_wykroczenia
     BEFORE INSERT OR UPDATE OF PRZYDZIAL_MYSZY
     ON KOCURY
@@ -654,7 +674,36 @@ CREATE OR REPLACE TRIGGER trg_monitor_wykroczenia
 DECLARE
     min_mysz FUNKCJE.MIN_MYSZY%TYPE;
     max_mysz FUNKCJE.MAX_MYSZY%TYPE;
-    --poza EXCEPTION;
+    poza EXCEPTION;
+    curr_data DATE DEFAULT SYSDATE;
+    zdarzenie VARCHAR2(20);
+    --PRAGMA AUTONOMOUS_TRANSACTION;
+BEGIN
+    SELECT MIN_MYSZY, MAX_MYSZY INTO min_mysz, max_mysz FROM FUNKCJE WHERE FUNKCJA = :NEW.FUNKCJA;
+    IF max_mysz < :NEW.PRZYDZIAL_MYSZY OR min_mysz > :NEW.PRZYDZIAL_MYSZY THEN
+        IF INSERTING THEN 
+            zdarzenie := 'INSERT';
+        ELSIF UPDATING THEN
+            zdarzenie := 'UPDATE';
+        END IF;
+        INSERT INTO Proby_wykroczenia(kto, kiedy, jakiemu, operacja) VALUES (ORA_LOGIN_USER, curr_data, :NEW.PSEUDO, zdarzenie);
+        RAISE poza;
+    END IF;
+EXCEPTION
+    WHEN poza THEN
+        DBMS_OUTPUT.PUT_LINE('poza zakresem');
+        :NEW.PRZYDZIAL_MYSZY := :OLD.PRZYDZIAL_MYSZY;
+END;
+
+
+
+CREATE OR REPLACE TRIGGER trg_monitor_wykroczenia2
+    BEFORE INSERT OR UPDATE OF PRZYDZIAL_MYSZY
+    ON KOCURY
+    FOR EACH ROW
+DECLARE
+    min_mysz FUNKCJE.MIN_MYSZY%TYPE;
+    max_mysz FUNKCJE.MAX_MYSZY%TYPE;
     curr_data DATE DEFAULT SYSDATE;
     zdarzenie VARCHAR2(20);
     PRAGMA AUTONOMOUS_TRANSACTION;
@@ -669,13 +718,10 @@ BEGIN
         INSERT INTO Proby_wykroczenia(kto, kiedy, jakiemu, operacja) VALUES (ORA_LOGIN_USER, curr_data, :NEW.PSEUDO, zdarzenie);
         COMMIT;
         RAISE_APPLICATION_ERROR(-20001,'przydzial myszy poza zakresem funkcji, nie wykonano zmian.');
-        --:NEW.PRZYDZIAL_MYSZY := :OLD.PRZYDZIAL_MYSZY;
-        --RAISE poza;
     END IF;
---EXCEPTION
-    --WHEN poza THEN
-        --DBMS_OUTPUT.PUT_LINE('poza zakresem');
 END;
+
+DROP TRIGGER trg_monitor_wykroczenia2;
 
 
 UPDATE KOCURY
@@ -686,6 +732,7 @@ SELECT * FROM Kocury;
 SELECT * FROM Proby_wykroczenia;
 
 ROLLBACK;
+TRUNCATE TABLE Proby_wykroczenia;
 
 DROP TABLE Proby_wykroczenia;
 DROP TRIGGER trg_monitor_wykroczenia;
