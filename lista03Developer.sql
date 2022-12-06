@@ -491,19 +491,21 @@ FROM FUNKCJE;
 
 SELECT funkcja, SUM(NVL(PRZYDZIAL_MYSZY, 0) + NVL(MYSZY_EXTRA, 0))
 FROM KOCURY
-GROUP BY funkcja;
+GROUP BY funkcja
+ORDER BY funkcja;
 
 
---zad43 polecenie
+--zad43 polecenie nie dziala
 DECLARE 
     CURSOR funkcje IS SELECT funkcja, SUM(NVL(PRZYDZIAL_MYSZY, 0) + NVL(MYSZY_EXTRA, 0)) suma_dla_funkcji
                         FROM KOCURY
-                        GROUP BY funkcja;
-    CURSOR iloscKotow IS SELECT COUNT(pseudo) ilosc, SUM(NVL(PRZYDZIAL_MYSZY, 0) + NVL(MYSZY_EXTRA, 0)) sumaMyszy
+                        GROUP BY funkcja
+                        ORDER BY funkcja;
+    CURSOR iloscKotow IS SELECT COUNT(*) ilosc, SUM(NVL(PRZYDZIAL_MYSZY, 0) + NVL(MYSZY_EXTRA, 0)) sumaMyszy
                         FROM Kocury, Bandy WHERE Kocury.nr_bandy = Bandy.nr_bandy
                         GROUP BY Bandy.nazwa, Kocury.plec
                         ORDER BY Bandy.nazwa, plec;
-    CURSOR funkcjezBand IS SELECT SUM(NVL(Kocury.PRZYDZIAL_MYSZY, 0) + NVL(Kocury.MYSZY_EXTRA, 0)) sumaMyszy,
+    CURSOR funkcjezBand IS SELECT SUM(NVL(PRZYDZIAL_MYSZY, 0) + NVL(MYSZY_EXTRA, 0)) sumaMyszy,
                                 Kocury.Funkcja funkcja,
                                 Bandy.nazwa naz,
                                 Kocury.plec pl
@@ -513,7 +515,7 @@ DECLARE
     ilosc NUMBER;
     suma NUMBER;
     il iloscKotow%ROWTYPE;
-    bpf funkcjezBand%ROWTYPE;
+    poszegolny_kot funkcjezBand%ROWTYPE;
 BEGIN
     DBMS_OUTPUT.put('NAZWA BANDY       PLEC    ILE ');
     FOR fun IN funkcje
@@ -531,7 +533,7 @@ BEGIN
     
     OPEN funkcjezBand;
     OPEN iloscKotow;
-    FETCH funkcjezBand INTO bpf;
+    FETCH funkcjezBand INTO poszegolny_kot;
     FOR banda IN (SELECT nazwa, NR_BANDY FROM BANDY WHERE nazwa <> 'ROCKERSI' ORDER BY nazwa) -- zastanow sie
         LOOP
             FOR ple IN (SELECT PLEC FROM KOCURY GROUP BY PLEC ORDER BY PLEC ) -- stinky cheese
@@ -543,10 +545,10 @@ BEGIN
                     DBMS_OUTPUT.put(LPAD(il.ilosc, 4));
                     FOR fun IN funkcje
                         LOOP
-                            IF fun.funkcja = bpf.funkcja AND banda.nazwa = bpf.naz AND ple.plec = bpf.pl
+                            IF fun.funkcja = poszegolny_kot.funkcja AND banda.nazwa = poszegolny_kot.naz AND ple.plec = poszegolny_kot.pl
                             THEN 
-                                DBMS_OUTPUT.put(LPAD(NVL(bpf.sumaMyszy, 0), 10));
-                                FETCH funkcjezBand INTO bpf;
+                                DBMS_OUTPUT.put(LPAD(NVL(poszegolny_kot.sumaMyszy, 0), 10));
+                                FETCH funkcjezBand INTO poszegolny_kot;
                             ELSE
                                 DBMS_OUTPUT.put(LPAD(NVL(0, 0), 10));
                             END IF;
@@ -720,12 +722,14 @@ BEGIN
     END IF;
 END;
 
-DROP TRIGGER trg_monitor_wykroczenia2;
+DROP TRIGGER trg_monitor_wykroczenia;
 
 
 UPDATE KOCURY
 SET PRZYDZIAL_MYSZY = 80
 WHERE IMIE = 'JACEK';
+
+INSERT INTO Kocury VALUES ('GRUBY','M','BEN','LAPACZ','RAFA','2008-11-01',70,NULL,4);
 
 SELECT * FROM Kocury;
 SELECT * FROM Proby_wykroczenia;
