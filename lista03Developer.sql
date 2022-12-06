@@ -196,7 +196,7 @@ EXCEPTION
         DBMS_OUTPUT.PUT_LINE(TRIM(TRAILING ',' FROM wiadomosc_exc) || ': juz istnieje');
 END;
 
---zad40
+--zad40 i zad 44
 CREATE OR REPLACE PACKAGE PACK IS
     FUNCTION ObliczPodatek(pseudonim KOCURY.PSEUDO%TYPE) RETURN NUMBER;
     PROCEDURE  AddBanda(nr_ban BANDY.NR_BANDY%TYPE,
@@ -450,7 +450,7 @@ BEGIN
     WHERE pseudo = 'TYGRYS';
     przydzial_tygrysa := przydzial_tygrysa - kara;
     ekstra := ekstra + nagroda;
-    IF kara <> 0 AND nagroda <> 0 THEN
+    IF kara <> 0 OR nagroda <> 0 THEN
         DBMS_OUTPUT.PUT_LINE('Nowy przydzial Tygrysa: ' || przydzial_tygrysa);
         DBMS_OUTPUT.PUT_LINE('Nowe myszy ekstra Tygrysa: ' || ekstra);
         kara := 0;
@@ -464,7 +464,7 @@ END AFTER STATEMENT;
 END;
 
 UPDATE KOCURY
-SET PRZYDZIAL_MYSZY = 50
+SET PRZYDZIAL_MYSZY = 25
 WHERE PSEUDO = 'PUSZYSTA';
 
 UPDATE Kocury
