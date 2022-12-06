@@ -624,11 +624,11 @@ BEGIN
         LOOP
             SELECT COUNT(*) INTO ILE FROM DODATKI_EXTRA WHERE pseudo = milusia.pseudo;
             IF ILE > 0 THEN
-                POLECENIE := 'UPDATE DODATKI_EXTRA SET dod_extra = dod_extra - 10 WHERE milusia.pseudo = pseudo;';
+                POLECENIE:='UPDATE DODATKI_EXTRA SET dod_extra = dod_extra - 10 WHERE :mil_ps = pseudo';
             ELSE 
-                POLECENIE := 'INSERT INTO DODATKI_EXTRA(PSEUDO, DOD_EXTRA) VALUES(milusia.PSEUDO, -10);';
+                POLECENIE:='INSERT INTO DODATKI_EXTRA (PSEUDO, DOD_EXTRA) VALUES (:mil_ps, -10)';
             END IF;
-            EXECUTE IMMEDIATE POLECENIE;
+            EXECUTE IMMEDIATE POLECENIE USING milusia.pseudo;
         END LOOP;
         COMMIT;
     END IF;
@@ -636,12 +636,12 @@ END;
 
 
 UPDATE KOCURY
-SET PRZYDZIAL_MYSZY = 100
-WHERE IMIE = 'SONIA';
+SET PRZYDZIAL_MYSZY = 80
+WHERE IMIE = 'RUDA';
 
 UPDATE KOCURY
-SET przydzial_myszy = 200
-WHERE imie = 'SONIA';
+SET przydzial_myszy = 150
+WHERE imie = 'RUDA';
 
 SELECT *
 FROM KOCURY
@@ -718,7 +718,7 @@ BEGIN
         END IF;
         INSERT INTO Proby_wykroczenia(kto, kiedy, jakiemu, operacja) VALUES (ORA_LOGIN_USER, curr_data, :NEW.PSEUDO, zdarzenie);
         COMMIT;
-        RAISE_APPLICATION_ERROR(-20001,'przydzial myszy poza zakresem funkcji, nie wykonano zmian.');
+        RAISE_APPLICATION_ERROR(-20001,'Przydzial myszy jest poza zakresem przydzia³u funkcji kota, nie wykonano zmian.');
     END IF;
 END;
 
