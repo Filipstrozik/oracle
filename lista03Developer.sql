@@ -71,7 +71,7 @@ BEGIN
                 zmiany := zmiany + 1;
             END IF;
         END LOOP;
-    DBMS_OUTPUT.PUT_LINE('Calk. przydzial w stadku - ' || TO_CHAR(suma) || ' Zmian - ' || TO_CHAR(zmiany));
+    DBMS_OUTPUT.PUT_LINE('Calk. przydzial w stadku - ' || TO_CHAR(suma) || ' L zmian - ' || TO_CHAR(zmiany));
     CLOSE kolejka;
 END;
 
@@ -495,7 +495,7 @@ GROUP BY funkcja
 ORDER BY funkcja;
 
 
---zad43 polecenie nie dziala
+--zad43 
 DECLARE 
     CURSOR funkcje IS SELECT funkcja, SUM(NVL(PRZYDZIAL_MYSZY, 0) + NVL(MYSZY_EXTRA, 0)) suma_dla_funkcji
                         FROM KOCURY
@@ -607,6 +607,8 @@ nie wycofamy kary w dodatkach extra;
 EXECUTE IMMEDIATE - wewn. dyn. SQL DDL które jest zabrobione w wyzwalaczach.
 Dziêki pragma autonomous_transaction mo¿na wykonaæ zabroniony w blokach DCL - COMMIT
 */
+
+
 CREATE OR REPLACE TRIGGER trg_tygrys_kara
     BEFORE UPDATE OF PRZYDZIAL_MYSZY
     ON KOCURY
@@ -616,7 +618,7 @@ DECLARE
                 FROM KOCURY
                 WHERE funkcja = 'MILUSIA';
     ILE NUMBER;
-    POLECENIE VARCHAR2(100);
+    POLECENIE VARCHAR2(1000);
     PRAGMA AUTONOMOUS_TRANSACTION;
 BEGIN
     IF LOGIN_USER <> 'TYGRYS' AND :NEW.PRZYDZIAL_MYSZY > :OLD.PRZYDZIAL_MYSZY AND :NEW.FUNKCJA = 'MILUSIA' THEN
@@ -666,8 +668,7 @@ CREATE TABLE Proby_wykroczenia
 
 DROP TABLE Proby_wykroczenia;
 
---wyzwalacz. CO TO PRAGMA AUTONOMOUS_TRANSACTION? - 
--- po co commit?
+--wyzwalacz.
 CREATE OR REPLACE TRIGGER trg_monitor_wykroczenia_other
     BEFORE INSERT OR UPDATE OF PRZYDZIAL_MYSZY
     ON KOCURY
@@ -678,7 +679,7 @@ DECLARE
     poza EXCEPTION;
     curr_data DATE DEFAULT SYSDATE;
     zdarzenie VARCHAR2(20);
-    --PRAGMA AUTONOMOUS_TRANSACTION;
+    PRAGMA AUTONOMOUS_TRANSACTION;
 BEGIN
     SELECT MIN_MYSZY, MAX_MYSZY INTO min_mysz, max_mysz FROM FUNKCJE WHERE FUNKCJA = :NEW.FUNKCJA;
     IF max_mysz < :NEW.PRZYDZIAL_MYSZY OR min_mysz > :NEW.PRZYDZIAL_MYSZY THEN
@@ -688,6 +689,7 @@ BEGIN
             zdarzenie := 'UPDATE';
         END IF;
         INSERT INTO Proby_wykroczenia(kto, kiedy, jakiemu, operacja) VALUES (ORA_LOGIN_USER, curr_data, :NEW.PSEUDO, zdarzenie);
+        COMMIT;
         RAISE poza;
     END IF;
 EXCEPTION
@@ -707,7 +709,7 @@ DECLARE
     max_mysz FUNKCJE.MAX_MYSZY%TYPE;
     curr_data DATE DEFAULT SYSDATE;
     zdarzenie VARCHAR2(20);
-    PRAGMA AUTONOMOUS_TRANSACTION;
+    --PRAGMA AUTONOMOUS_TRANSACTION;
 BEGIN
     SELECT MIN_MYSZY, MAX_MYSZY INTO min_mysz, max_mysz FROM FUNKCJE WHERE FUNKCJA = :NEW.FUNKCJA;
     IF max_mysz < :NEW.PRZYDZIAL_MYSZY OR min_mysz > :NEW.PRZYDZIAL_MYSZY THEN
@@ -717,7 +719,7 @@ BEGIN
             zdarzenie := 'UPDATE';
         END IF;
         INSERT INTO Proby_wykroczenia(kto, kiedy, jakiemu, operacja) VALUES (ORA_LOGIN_USER, curr_data, :NEW.PSEUDO, zdarzenie);
-        COMMIT;
+        --COMMIT;
         RAISE_APPLICATION_ERROR(-20001,'Przydzial myszy jest poza zakresem przydzia³u funkcji kota, nie wykonano zmian.');
     END IF;
 END;
