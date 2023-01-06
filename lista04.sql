@@ -36,7 +36,7 @@ CREATE TABLE KocuryT OF KocuryO (
   plec CONSTRAINT kocuryo_plec_ch CHECK(plec IN ('M', 'D')),
   pseudo CONSTRAINT kocuryo_pseudo_pk PRIMARY KEY,
   funkcja CONSTRAINT ko_f_fk REFERENCES Funkcje(funkcja),
-  szef SCOPE IS KocuryT,--to nie działa
+  szef SCOPE IS KocuryT,
   w_stadku_od DEFAULT SYSDATE,
   nr_bandy CONSTRAINT ko_nr_fk REFERENCES Bandy(nr_bandy)
 );
@@ -69,7 +69,7 @@ CREATE TABLE PlebsT OF PlebsO(
     CONSTRAINT plebso_pk PRIMARY KEY (pseudo));
 
 
---elita
+-- ElitaO
 CREATE OR REPLACE TYPE ElitaO AS OBJECT
 (
     pseudo VARCHAR2(15),
@@ -77,7 +77,7 @@ CREATE OR REPLACE TYPE ElitaO AS OBJECT
     slugus   REF PlebsO,
     MEMBER FUNCTION get_sluga RETURN REF PlebsO
 );
-
+-- ElitaO Body
 CREATE OR REPLACE TYPE BODY ElitaO AS
   MEMBER FUNCTION get_sluga RETURN REF PlebsO IS
     BEGIN
@@ -85,13 +85,14 @@ CREATE OR REPLACE TYPE BODY ElitaO AS
     END;
 END;
 
-
+-- ElitaT Table
 CREATE TABLE ElitaT OF ElitaO(
     pseudo CONSTRAINT elitao_pseudo_pk PRIMARY KEY,
     kot SCOPE IS KocuryT CONSTRAINT elitao_kot_nn NOT NULL,
     slugus SCOPE IS PlebsT
 );
 
+-- KontoO Object
 CREATE OR REPLACE TYPE KontoO AS OBJECT
 (
     nr_myszy NUMBER(5),
@@ -101,28 +102,65 @@ CREATE OR REPLACE TYPE KontoO AS OBJECT
     MEMBER PROCEDURE wyprowadz_mysz(dat DATE),
     MAP MEMBER FUNCTION GET_INFO RETURN VARCHAR2
 );
-
+-- KontoO Body
 CREATE OR REPLACE TYPE BODY KontoO AS
 MAP MEMBER FUNCTION GET_INFO RETURN VARCHAR2 IS
     wl ElitaO;
-    kot KocuryO;
+    kocur KocuryO;
     BEGIN
         SELECT DEREF(kot) INTO wl FROM DUAL;
-        SELECT DEREF(wl.kot) INTO kot FROM DUAL;
-        RETURN TO_CHAR(data_wprowadzenia) || ' ' || kot.PSEUDO || TO_CHAR(data_usuniecia);
+        SELECT DEREF(wl.kot) INTO kocur FROM DUAL;
+        RETURN TO_CHAR(data_wprowadzenia) || ' ' || kocur.PSEUDO || TO_CHAR(data_usuniecia);
     END;
     MEMBER PROCEDURE wyprowadz_mysz(dat DATE) IS
     BEGIN
       data_usuniecia := dat;
     END;
 END;
--- not implemented
+-- KontoT Table
+
 CREATE TABLE KontoT OF KontoO (
-    nr_myszy CONSTRAINT kontaO_n_pk PRIMARY KEY,
-    wlasciciel SCOPE IS ElitaT CONSTRAINT ko_w_nn NOT NULL,
+    nr_myszy CONSTRAINT kontao_n_pk PRIMARY KEY,
+    kot SCOPE IS ElitaT CONSTRAINT ko_w_nn NOT NULL,
     data_wprowadzenia CONSTRAINT ko_dw_nn NOT NULL,
     CONSTRAINT ko_dw_du_ch CHECK(data_wprowadzenia <= data_usuniecia)
 );
---incydenty
+-- Incydenty Object
 
+CREATE OR REPLACE TYPE IncydentO AS OBJECT
+(
+    pseudo VARCHAR2(15),
+    kot REF KocuryO,
+    imie_wroga VARCHAR2(15),
+    data_incydentu DATE,
+    opis_incydentu VARCHAR2(100),
+    MEMBER FUNCTION czy_aktualny RETURN BOOLEAN,
+    MEMBER FUNCTION czy_ma_opis RETURN BOOLEAN
+);
+-- IncydentyO Body
+CREATE OR REPLACE TYPE BODY IncydentO
+AS
+    MEMBER FUNCTION czy_ma_opis RETURN BOOLEAN
+    IS
+    BEGIN
+        RETURN opis_incydentu IS NOT NULL;
+    END;
+
+    MEMBER FUNCTION czy_aktualny RETURN BOOLEAN
+    IS
+    BEGIN
+        RETURN data_incydentu >= '2008-01-01';
+    END;
+END;
+-- IncydentyT Table
+
+CREATE TABLE IncydentyT OF IncydentO (
+    CONSTRAINT incydento_pk PRIMARY KEY(pseudo, imie_wroga),
+    kot SCOPE IS KocuryT CONSTRAINT incydentyo_kot_nn NOT NULL,
+    pseudo CONSTRAINT incydentyo_pseudo_fk REFERENCES KocuryT(pseudo),
+    imie_wroga CONSTRAINT incydento_imie_wroga_fk REFERENCES Wrogowie(imie_wroga),
+    data_incydentu CONSTRAINT incydentyo_data_nn NOT NULL
+);
+--ok for now
+--CREATE SEQUENCE nr_myszy;??
 --dane wprowadzenia myszy
