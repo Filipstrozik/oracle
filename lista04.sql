@@ -161,6 +161,26 @@ CREATE TABLE IncydentyT OF IncydentO (
     imie_wroga CONSTRAINT incydento_imie_wroga_fk REFERENCES Wrogowie(imie_wroga),
     data_incydentu CONSTRAINT incydentyo_data_nn NOT NULL
 );
---ok for now
---CREATE SEQUENCE nr_myszy;??
+
+--napisac triggery wykluczajace sie
+-- sprawdzenie czy dodawany kot w elicie nie jest w plebsie
+-- funkcja lub pseudokolumna "COUNT" może występować tylko wewnątrz instrukcji SQL
+CREATE OR REPLACE TRIGGER elita_trg
+BEFORE INSERT OR UPDATE ON ElitaT
+FOR EACH ROW
+    DECLARE
+        count NUMBER;
+    BEGIN
+        SELECT COUNT(PSEUDO) INTO count FROM PlebsT P WHERE P.kot = :NEW.kot;
+        IF count > 0 THEN
+            RAISE_APPLICATION_ERROR(-20001, 'Kot należy już do plebsu.');
+        END IF;
+
+        SELECT COUNT(PSEUDO) INTO count FROM ElitaT E WHERE E.kot = :NEW.kot;
+        IF count > 0 THEN
+            RAISE_APPLICATION_ERROR(-20001, 'Kot należy już do elity.');
+        END IF;
+END;
+
+
 --dane wprowadzenia myszy
