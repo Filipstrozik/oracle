@@ -3,7 +3,7 @@ DROP TABLE KocuryT CASCADE CONSTRAINTS;
 DROP TABLE PlebsT CASCADE CONSTRAINTS;
 DROP TABLE ElitaT CASCADE CONSTRAINTS;
 DROP TABLE KontoT CASCADE CONSTRAINTS;
-DROP TABLE INCYDENTYT CASCADE CONSTRAINTS;
+DROP TABLE IncydentyT CASCADE CONSTRAINTS;
 DROP TYPE BODY KocuryO ;
 DROP TYPE KocuryO FORCE;
 DROP TYPE BODY ElitaO;
@@ -23,11 +23,11 @@ CREATE OR REPLACE TYPE KocuryO AS OBJECT
     plec            VARCHAR2(1),
     pseudo          VARCHAR2(15),
     funkcja         VARCHAR2(10),
-    szef            REF KocuryO,
     w_stadku_od     DATE,
     przydzial_myszy NUMBER(3),
     myszy_extra     NUMBER(3),
     nr_bandy        NUMBER(2),
+    szef            REF KocuryO,
     MEMBER FUNCTION caly_przydzial RETURN NUMBER,
     MAP MEMBER FUNCTION info RETURN VARCHAR2
 );
@@ -200,7 +200,7 @@ BEGIN
         RAISE_APPLICATION_ERROR(-20002, 'Kot należy już do elity.');
     END IF;
 END;
-
+DROP TRIGGER plebs_trg;
 CREATE OR REPLACE TRIGGER plebs_trg
     BEFORE INSERT OR UPDATE
     ON PlebsT
@@ -239,41 +239,36 @@ BEGIN
             END IF;
             INSERT INTO KocuryT VALUES
                     (KocuryO(''' || kot.imie || ''', ''' || kot.plec || ''', ''' || kot.pseudo || ''', ''' || kot.funkcja
-                    || ''',''' ||kot.w_stadku_od || ''',''' || kot.przydzial_myszy ||''',''' || kot.myszy_extra ||
-                        ''',''' || kot.nr_bandy || ''', ' || 'szef' || '));
+                    || ''','''||kot.w_stadku_od || ''', ''' || kot.przydzial_myszy ||''', ''' || kot.myszy_extra ||
+                        ''',''' || kot.nr_bandy ||''',' || 'szef' || '));
             END;';
         DBMS_OUTPUT.PUT_LINE(sql_string);
         EXECUTE IMMEDIATE sql_string;
         END LOOP;
 END;
 
-
-
---wersje lite
+SELECT * FROM KocuryT;
+COMMIT;
+--TODO
 DECLARE
-    CURSOR koty IS SELECT * FROM KOCURY
-        CONNECT BY PRIOR PSEUDO=SZEF
-        START WITH SZEF IS NULL;
-    sql_string VARCHAR2(1000);
+CURSOR zdarzenia IS SELECT * FROM Wrogowie_kocurow;
+dyn_sql VARCHAR2(1000);
 BEGIN
-    FOR kot in koty
+    FOR zdarzenie IN zdarzenia
     LOOP
-        sql_string:='DECLARE
-            szef REF KocuryO;
-            counter NUMBER(2);
+      dyn_sql:='DECLARE
+            kot REF Kocury_o;
         BEGIN
-            INSERT INTO KocuryT VALUES
-                    (KocuryO(''' || kot.imie || ''', ''' || kot.plec || ''', ''' || kot.pseudo || ''', ''' || kot.funkcja
-                    || ''',''' ||kot.w_stadku_od || ''',''' || kot.przydzial_myszy ||''',''' || kot.myszy_extra ||
-                        ''',''' || kot.nr_bandy || ''', ' || REF(kot.SZEF) || '));
+            SELECT REF(K) INTO kot FROM Kocury2 K WHERE K.pseudo='''|| zdarzenie.pseudo||''';
+            INSERT INTO Incydenty VALUES
+                    (Incydenty_O(''' || zdarzenie.pseudo || ''',  kot , ''' || zdarzenie.imie_wroga || ''', ''' || zdarzenie.data_incydentu
+                    || ''',''' || zdarzenie.opis_incydentu|| '''));
             END;';
-        DBMS_OUTPUT.PUT_LINE(sql_string);
-        EXECUTE IMMEDIATE sql_string;
-        END LOOP;
+       DBMS_OUTPUT.PUT_LINE(dyn_sql);
+       EXECUTE IMMEDIATE  dyn_sql;
+    END LOOP;
 END;
-SELECT REF(P) FROM KocuryT P WHERE P.pseudo='PLACEK';
-
-
+SELECT * FROM Incydenty;
 
 --plebs
 DECLARE
@@ -288,12 +283,18 @@ BEGIN
             kot REF KocuryO;
         BEGIN
             SELECT REF(K) INTO kot FROM KocuryT K WHERE K.pseudo='''|| plebs.pseudo||''';
-            INSERT INTO Plebs VALUES
-                    (Plebs_O(kot, '''|| plebs.pseudo || '''));
+            INSERT INTO PlebsT VALUES
+                    (PlebsO('''|| plebs.pseudo ||''',' || 'kot' || '));
             END;';
        EXECUTE IMMEDIATE  dyn_sql;
     END LOOP;
 END;
+
+SELECT P.pseudo, P.kot.info() FROM PlebsT P;
+ROLLBACK;
+
+
+
 
 -- koty podzielone na dwie czesci, blokady trigger done
 -- nie wszystkie koty poluja od 2004 i nie mogą brac udziału przed 2004
