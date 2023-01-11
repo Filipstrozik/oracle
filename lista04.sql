@@ -1,3 +1,21 @@
+--sekcja usuwania:
+DROP TABLE KocuryT CASCADE CONSTRAINTS;
+DROP TABLE PlebsT CASCADE CONSTRAINTS;
+DROP TABLE ElitaT CASCADE CONSTRAINTS;
+DROP TABLE KontoT CASCADE CONSTRAINTS;
+DROP TABLE INCYDENTYT CASCADE CONSTRAINTS;
+DROP TYPE BODY KocuryO ;
+DROP TYPE KocuryO FORCE;
+DROP TYPE BODY ElitaO;
+DROP TYPE ElitaO FORCE;
+DROP TYPE BODY PlebsO;
+DROP TYPE PlebsO FORCE;
+DROP TYPE BODY KontoO;
+DROP TYPE KontoO FORCE;
+DROP TYPE BODY IncydentO;
+DROP TYPE IncydentO FORCE;
+
+
 --zad47
 CREATE OR REPLACE TYPE KocuryO AS OBJECT
 (
@@ -166,21 +184,123 @@ CREATE TABLE IncydentyT OF IncydentO (
 -- sprawdzenie czy dodawany kot w elicie nie jest w plebsie
 -- funkcja lub pseudokolumna "COUNT" może występować tylko wewnątrz instrukcji SQL
 CREATE OR REPLACE TRIGGER elita_trg
-BEFORE INSERT OR UPDATE ON ElitaT
-FOR EACH ROW
-    DECLARE
-        count NUMBER;
-    BEGIN
-        SELECT COUNT(PSEUDO) INTO count FROM PlebsT P WHERE P.kot = :NEW.kot;
-        IF count > 0 THEN
-            RAISE_APPLICATION_ERROR(-20001, 'Kot należy już do plebsu.');
-        END IF;
+    BEFORE INSERT OR UPDATE
+    ON ElitaT
+    FOR EACH ROW
+DECLARE
+    count NUMBER;
+BEGIN
+    SELECT COUNT(PSEUDO) INTO count FROM PlebsT P WHERE P.kot = :NEW.kot;
+    IF count > 0 THEN
+        RAISE_APPLICATION_ERROR(-20001, 'Kot należy już do plebsu.');
+    END IF;
 
-        SELECT COUNT(PSEUDO) INTO count FROM ElitaT E WHERE E.kot = :NEW.kot;
-        IF count > 0 THEN
-            RAISE_APPLICATION_ERROR(-20001, 'Kot należy już do elity.');
-        END IF;
+    SELECT COUNT(PSEUDO) INTO count FROM ElitaT E WHERE E.kot = :NEW.kot;
+    IF count > 0 THEN
+        RAISE_APPLICATION_ERROR(-20002, 'Kot należy już do elity.');
+    END IF;
+END;
+
+CREATE OR REPLACE TRIGGER plebs_trg
+    BEFORE INSERT OR UPDATE
+    ON PlebsT
+    FOR EACH ROW
+DECLARE
+    count NUMBER;
+BEGIN
+    SELECT COUNT(PSEUDO) INTO count FROM ElitaT E WHERE E.kot = :NEW.kot;
+    IF count > 0 THEN
+        RAISE_APPLICATION_ERROR(-20003, 'Kot należy już do elity.');
+    END IF;
+
+    SELECT COUNT(PSEUDO) INTO count FROM PlebsT P WHERE P.kot = :NEW.kot;
+    IF count > 0 THEN
+        RAISE_APPLICATION_ERROR(-20004, 'Kot należy już do plebsu.');
+    END IF;
+END;
+--dane wprowadzenia myszy
+--TODO
+DECLARE
+    CURSOR koty IS SELECT * FROM KOCURY
+        CONNECT BY PRIOR PSEUDO=SZEF
+        START WITH SZEF IS NULL;
+    sql_string VARCHAR2(1000);
+BEGIN
+    FOR kot in koty
+    LOOP
+        sql_string:='DECLARE
+            szef REF KocuryO;
+            counter NUMBER(2);
+        BEGIN
+            szef:=NULL;
+            SELECT COUNT(*) INTO counter FROM KocuryT T WHERE T.pseudo='''|| kot.szef||''';
+            IF (counter>0) THEN
+                SELECT REF(T) INTO szef FROM KocuryT T WHERE T.pseudo='''|| kot.szef||''';
+            END IF;
+            INSERT INTO KocuryT VALUES
+                    (KocuryO(''' || kot.imie || ''', ''' || kot.plec || ''', ''' || kot.pseudo || ''', ''' || kot.funkcja
+                    || ''',''' ||kot.w_stadku_od || ''',''' || kot.przydzial_myszy ||''',''' || kot.myszy_extra ||
+                        ''',''' || kot.nr_bandy || ''', ' || 'szef' || '));
+            END;';
+        DBMS_OUTPUT.PUT_LINE(sql_string);
+        EXECUTE IMMEDIATE sql_string;
+        END LOOP;
 END;
 
 
---dane wprowadzenia myszy
+
+--wersje lite
+DECLARE
+    CURSOR koty IS SELECT * FROM KOCURY
+        CONNECT BY PRIOR PSEUDO=SZEF
+        START WITH SZEF IS NULL;
+    sql_string VARCHAR2(1000);
+BEGIN
+    FOR kot in koty
+    LOOP
+        sql_string:='DECLARE
+            szef REF KocuryO;
+            counter NUMBER(2);
+        BEGIN
+            INSERT INTO KocuryT VALUES
+                    (KocuryO(''' || kot.imie || ''', ''' || kot.plec || ''', ''' || kot.pseudo || ''', ''' || kot.funkcja
+                    || ''',''' ||kot.w_stadku_od || ''',''' || kot.przydzial_myszy ||''',''' || kot.myszy_extra ||
+                        ''',''' || kot.nr_bandy || ''', ' || REF(kot.SZEF) || '));
+            END;';
+        DBMS_OUTPUT.PUT_LINE(sql_string);
+        EXECUTE IMMEDIATE sql_string;
+        END LOOP;
+END;
+SELECT REF(P) FROM KocuryT P WHERE P.pseudo='PLACEK';
+
+
+
+--plebs
+DECLARE
+CURSOR koty IS SELECT  pseudo
+                    FROM (SELECT K.pseudo pseudo FROM KocuryT K ORDER BY K.caly_przydzial() ASC)
+                    WHERE ROWNUM<= (SELECT COUNT(*) FROM KocuryT)/2;
+dyn_sql VARCHAR2(1000);
+BEGIN
+    FOR plebs IN koty
+    LOOP
+      dyn_sql:='DECLARE
+            kot REF KocuryO;
+        BEGIN
+            SELECT REF(K) INTO kot FROM KocuryT K WHERE K.pseudo='''|| plebs.pseudo||''';
+            INSERT INTO Plebs VALUES
+                    (Plebs_O(kot, '''|| plebs.pseudo || '''));
+            END;';
+       EXECUTE IMMEDIATE  dyn_sql;
+    END LOOP;
+END;
+
+-- koty podzielone na dwie czesci, blokady trigger done
+-- nie wszystkie koty poluja od 2004 i nie mogą brac udziału przed 2004
+-- wypłata w ostatnioą środę (uniemożliwić wypłatę)
+-- wybierec te zadania które mają złączenia (ref) i metody w typach
+-- zapytania o dodatkowe relacje
+
+--zadanie 3 wydajnosc kiladziesiat tysiecy krotek w 2 sekundy 5-7 sekund tez okey.
+-- bulk przygotowac i raz wysłać do serwera
+
