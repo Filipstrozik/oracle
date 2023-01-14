@@ -167,7 +167,7 @@ AS
     MEMBER FUNCTION czy_aktualny RETURN BOOLEAN
     IS
     BEGIN
-        RETURN data_incydentu >= '2008-01-01';
+        RETURN data_incydentu >= '2010-01-01';
     END;
 END;
 -- IncydentyT Table
@@ -188,38 +188,41 @@ CREATE OR REPLACE TRIGGER elita_trg
     ON ElitaT
     FOR EACH ROW
 DECLARE
-    count NUMBER;
+    countElita INTEGER;
 BEGIN
-    SELECT COUNT(PSEUDO) INTO count FROM PlebsT P WHERE P.kot = :NEW.kot;
-    IF count > 0 THEN
-        RAISE_APPLICATION_ERROR(-20001, 'Kot należy już do plebsu.');
+    SELECT COUNT(PSEUDO) INTO countElita FROM PlebsT P WHERE P.kot = :NEW.kot;
+    IF countElita > 0 THEN
+        RAISE_APPLICATION_ERROR(-20000, 'Kot należy już do plebsu.');
     END IF;
 
-    SELECT COUNT(PSEUDO) INTO count FROM ElitaT E WHERE E.kot = :NEW.kot;
-    IF count > 0 THEN
-        RAISE_APPLICATION_ERROR(-20002, 'Kot należy już do elity.');
+    SELECT COUNT(PSEUDO) INTO countElita FROM ElitaT E WHERE E.kot = :NEW.kot;
+    IF countElita > 0 THEN
+        RAISE_APPLICATION_ERROR(-20001, 'Kot należy już do elity.');
     END IF;
 END;
+DROP TRIGGER elita_trg;
 DROP TRIGGER plebs_trg;
+
 CREATE OR REPLACE TRIGGER plebs_trg
     BEFORE INSERT OR UPDATE
     ON PlebsT
     FOR EACH ROW
 DECLARE
-    count NUMBER;
+    countPlebs NUMBER;
 BEGIN
-    SELECT COUNT(PSEUDO) INTO count FROM ElitaT E WHERE E.kot = :NEW.kot;
-    IF count > 0 THEN
+    SELECT COUNT(PSEUDO) INTO countPlebs FROM ElitaT E WHERE E.kot = :NEW.kot;
+    IF countPlebs > 0 THEN
         RAISE_APPLICATION_ERROR(-20003, 'Kot należy już do elity.');
     END IF;
 
-    SELECT COUNT(PSEUDO) INTO count FROM PlebsT P WHERE P.kot = :NEW.kot;
-    IF count > 0 THEN
+    SELECT COUNT(PSEUDO) INTO countPlebs FROM PlebsT P WHERE P.kot = :NEW.kot;
+    IF countPlebs > 0 THEN
         RAISE_APPLICATION_ERROR(-20004, 'Kot należy już do plebsu.');
     END IF;
 END;
+
+
 --dane wprowadzenia myszy
---TODO
 DECLARE
     CURSOR koty IS SELECT * FROM KOCURY
         CONNECT BY PRIOR PSEUDO=SZEF
@@ -249,7 +252,8 @@ END;
 
 SELECT * FROM KocuryT;
 COMMIT;
---TODO
+
+
 DECLARE
 CURSOR zdarzenia IS SELECT * FROM Wrogowie_kocurow;
 dyn_sql VARCHAR2(1000);
@@ -257,18 +261,19 @@ BEGIN
     FOR zdarzenie IN zdarzenia
     LOOP
       dyn_sql:='DECLARE
-            kot REF Kocury_o;
+            kot REF KocuryO;
         BEGIN
-            SELECT REF(K) INTO kot FROM Kocury2 K WHERE K.pseudo='''|| zdarzenie.pseudo||''';
-            INSERT INTO Incydenty VALUES
-                    (Incydenty_O(''' || zdarzenie.pseudo || ''',  kot , ''' || zdarzenie.imie_wroga || ''', ''' || zdarzenie.data_incydentu
+            SELECT REF(K) INTO kot FROM KocuryT K WHERE K.pseudo='''|| zdarzenie.pseudo||''';
+            INSERT INTO IncydentyT VALUES
+                    (IncydentO(''' || zdarzenie.pseudo || ''',  kot , ''' || zdarzenie.imie_wroga || ''', ''' || zdarzenie.data_incydentu
                     || ''',''' || zdarzenie.opis_incydentu|| '''));
             END;';
        DBMS_OUTPUT.PUT_LINE(dyn_sql);
        EXECUTE IMMEDIATE  dyn_sql;
     END LOOP;
 END;
-SELECT * FROM Incydenty;
+
+SELECT * FROM IncydentyT;
 
 --plebs
 DECLARE
@@ -293,8 +298,70 @@ END;
 SELECT P.pseudo, P.kot.info() FROM PlebsT P;
 ROLLBACK;
 
+DECLARE
+CURSOR koty IS SELECT PSEUDO FROM (SELECT K.pseudo pseudo FROM KocuryT K ORDER BY K.caly_przydzial() DESC)
+    WHERE ROWNUM <= (SELECT COUNT(*) FROM KocuryT)/2;
+sql_string VARCHAR2(1000);
+num NUMBER:=1;
+BEGIN
+    FOR elita in koty
+    LOOP
+        sql_string:='DECLARE
+                        kot REF KocuryO;
+                        sluga REF PlebsO;
+                    BEGIN
+                        SELECT REF(K) INTO kot FROM KocuryT K WHERE K.pseudo=''' || elita.pseudo || ''';' ||
+                       'SELECT plebs INTO sluga FROM (SELECT REF(P) plebs, rownum num FROM PlebsT P) WHERE NUM=' || num ||';'||
+                    'INSERT INTO ElitaT VALUES (ElitaO(''' || elita.pseudo ||''', kot, sluga)); END;';
+        EXECUTE IMMEDIATE  sql_string;
+        num:=num+1;
+        END LOOP;
+END;
 
+SELECT E.kot.pseudo, E.slugus.pseudo, E.pseudo, E.kot.caly_przydzial() FROM ElitaT E;
 
+--konto
+CREATE SEQUENCE nr_myszy;
+
+DECLARE
+CURSOR koty IS SELECT pseudo FROM ElitaT;
+sql_string VARCHAR2(1000);
+BEGIN
+    FOR elita IN koty
+    LOOP
+      sql_string:='DECLARE
+            kot REF ElitaO;
+            dataw DATE:=SYSDATE;
+        BEGIN
+            SELECT REF(E) INTO kot FROM ElitaT E WHERE E.pseudo='''|| elita.pseudo||''';
+            INSERT INTO KontoT VALUES
+                    (KontoO(nr_myszy.NEXTVAL, dataw, NULL, kot));
+        END;';
+       DBMS_OUTPUT.PUT_LINE(sql_string);
+       EXECUTE IMMEDIATE  sql_string;
+    END LOOP;
+END;
+
+SELECT * FROM KontoT;
+
+--METODY:
+SELECT DEREF(kot).info() FROM PLEBST;
+SELECT DEREF(kot).info(), DEREF(slugus).get_details() FROM ELitaT;
+SELECT data_usuniecia, data_wprowadzenia, DEREF(kot).pseudo, DEREF(kot).get_sluga().get_details() FROM KONTOT;
+SELECT K.IMIE, K.PLEC, K.caly_przydzial() FROM KocuryT K WHERE K.caly_przydzial() > 90;
+--PODZAPYTANIE
+SELECT pseudo, plec FROM (SELECT K.pseudo pseudo, K.plec plec FROM KocuryT K WHERE K.PLEC = 'D');
+--GRUPOWANIE
+SELECT K.funkcja, COUNT(K.pseudo) as koty_w_funkcji FROM KocuryT K GROUP BY K.funkcja;
+
+SELECT DEREF(kot).pseudo "Kot", count(slugus) "Sługa"
+FROM ElitaT E
+GROUP BY DEREF(kot).pseudo;
+
+SELECT E.kot.pseudo, E.kot.caly_przydzial()
+FROM KocuryT K JOIN ElitaT E  ON E.kot = REF(K);
+
+SELECT REF(T). FROM PlebsT T WHERE T.kot.plec = 'M';
 
 -- koty podzielone na dwie czesci, blokady trigger done
 -- nie wszystkie koty poluja od 2004 i nie mogą brac udziału przed 2004
