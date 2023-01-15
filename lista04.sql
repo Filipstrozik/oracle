@@ -523,80 +523,101 @@ BEGIN
     CONSTRAINT daty_popr CHECK (data_zlowienia <= data_wydania))';
 END;
 
+
+
+SELECT * FROM MYSZY;
+
 DROP TABLE Myszy;
 ALTER SESSION SET NLS_DATE_FORMAT ='YYYY-MM-DD'
 
+CREATE SEQUENCE myszy_seq;
 
 DECLARE
-    data_start DATE := '2004-01-01';
-    data_ostatniej_srody DATE := NEXT_DAY(LAST_DAY(data_start) - 7), 'wednesday');
-    data_koncowa DATE := '2022-01-18';
-    myszy_mies NUMBER(5);
+    data_start           DATE           := '2004-01-01';
+    data_ostatniej_srody DATE           := NEXT_DAY(LAST_DAY(data_start) - 7, 'ŚRODA');
+    data_koncowa         DATE           := '2023-01-18';
+    myszy_mies           NUMBER(5);
 
     TYPE tp IS TABLE OF Kocury.pseudo%TYPE;
-    tab_pseudo tp := tp();
+    tab_pseudo           tp             := tp();
 
     TYPE tm IS TABLE OF NUMBER(4);
-    tab_myszy tm := tm();
+    tab_myszy            tm             := tm();
 
     TYPE myszy_rek IS TABLE OF Myszy%ROWTYPE INDEX BY BINARY_INTEGER;
-    myszki myszy_rek;
-
-    nr_myszy BINARY_INTEGER := 0;
-    indeks_zjadacza NUMBER(2);
-
-    lw NUMBER;
+    myszki               myszy_rek;
+    nr_myszy             BINARY_INTEGER := 0;
+    indeks_zjadacza      NUMBER(2);
 
 BEGIN
-    WHILE data_ostatniej_srody <= data_koncowa
     LOOP
-        IF data_start < NEXT_DAY(LAST_DAY(data_start), 'wednesday') - 7 THEN
-            data_ostatniej_srody := LEAST(NEXT_DAY(LAST_DAY(data_start), 'wednesday') - 7, data_koncowa);
-        ELSE
-            data_ostatniej_srody := LEAST(NEXT_DAY(LAST_DAY(ADD_MONTHS(data_start, 1)), 'wednesday') - 7, data_koncowa);
-        END IF;
+        EXIT WHEN data_start >= data_koncowa;
+            IF data_start < NEXT_DAY(LAST_DAY(data_start), 'ŚRODA') - 7 THEN
+                data_ostatniej_srody := LEAST(NEXT_DAY(LAST_DAY(data_start), 'ŚRODA') - 7, data_koncowa);
+            ELSE
+                data_ostatniej_srody :=
+                        LEAST(NEXT_DAY(LAST_DAY(ADD_MONTHS(data_start, 1)), 'ŚRODA') - 7, data_koncowa);
+            END IF;
 
-        --pobranie danych w miesiacu
-        SELECT SUM(NVL(przydzial_myszy,0) + NVL(myszy_extra,0))
-        INTO myszy_mies FROM KOCURY WHERE W_STADKU_OD < data_ostatniej_srody;
+            --pobranie danych w miesiacu
+            SELECT SUM(NVL(przydzial_myszy, 0) + NVL(myszy_extra, 0))
+            INTO myszy_mies
+            FROM KOCURY
+            WHERE W_STADKU_OD < data_ostatniej_srody;
 
-        --
-        SELECT pseudo, NVL(PRZYDZIAL_MYSZY, 0) + NVL(MYSZY_EXTRA,0)
-            BULK COLLECT INTO tab_pseudo, tab_myszy
-        FROM KOCURY WHERE W_STADKU_OD < data_ostatniej_srody;
+            --
+            SELECT pseudo,
+                   NVL(PRZYDZIAL_MYSZY, 0) + NVL(MYSZY_EXTRA, 0) BULK COLLECT
+            INTO tab_pseudo, tab_myszy
+            FROM KOCURY
+            WHERE W_STADKU_OD < data_ostatniej_srody;
 
-        indeks_zjadacza :=1;
-        myszy_mies := CEIL(myszy_mies/tab_pseudo.COUNT);
+            indeks_zjadacza := 1;
+            myszy_mies := CEIL(myszy_mies / tab_pseudo.COUNT);
 
-        FOR i IN 1..(myszy_mies*tab_pseudo.COUNT)
-        LOOP
-            nr_myszy := nr_myszy + 1;
-            myszki(nr_myszy).NR_MYSZY := nr_myszy;
-            myszki(nr_myszy.).LOWCA := tab_pseudo(MOD(i, tab_pseudo.COUNT)+1);
+            FOR i IN 1..(myszy_mies * tab_pseudo.COUNT)
+                LOOP
+                    nr_myszy := nr_myszy + 1;
+                    myszki(nr_myszy).NR_MYSZY := nr_myszy;
+                    myszki(nr_myszy).LOWCA := tab_pseudo(MOD(i, tab_pseudo.COUNT) + 1);
 
-            IF data_ostatniej_srody != data_koncowa THEN
-                myszki(nr_myszy).DATA_WYDANIA := data_ostatniej_srody;
+                    IF data_ostatniej_srody != data_koncowa THEN
+                        myszki(nr_myszy).DATA_WYDANIA := data_ostatniej_srody;
 
-                IF tab_myszy(indeks_zjadacza) = 0 THEN
-                    indeks_zjadacza := indeks_zjadacza +1;
-                ELSE
-                    tab_myszy(indeks_zjadacza) := tab_myszy(indeks_zjadacza)-1;
-                end if;
+                        IF tab_myszy(indeks_zjadacza) = 0 THEN
+                            indeks_zjadacza := indeks_zjadacza + 1;
+                        ELSE
+                            tab_myszy(indeks_zjadacza) := tab_myszy(indeks_zjadacza) - 1;
+                        end if;
 
-                --nadwyzki
-                IF indeks_zjadacza > tab_myszy.COUNT THEN
-                    indeks_zjadacza := DBMS_RANDOM.VALUE(1, tab_myszy.COUNT);
-                end if;
-
-
-
+                        --nadwyzki
+                        IF indeks_zjadacza > tab_myszy.COUNT THEN
+                            indeks_zjadacza := DBMS_RANDOM.VALUE(1, tab_myszy.COUNT);
+                        end if;
+                        myszki(nr_myszy).zjadacz := tab_pseudo(indeks_zjadacza);
+                    end if;
+                    myszki(nr_myszy).waga_myszy := DBMS_RANDOM.VALUE(10,85);
+                    myszki(nr_myszy).data_zlowienia := data_start + MOD(nr_myszy, TRUNC(data_ostatniej_srody) - TRUNC(data_start));
+                end loop;
+                data_start := data_ostatniej_srody + 1;
+                data_ostatniej_srody := NEXT_DAY(LAST_DAY(ADD_MONTHS(data_start, 1)) - 7, 'ŚRODA');
+            IF data_ostatniej_srody > data_koncowa THEN
+                data_ostatniej_srody := data_koncowa;
             end if;
+    END LOOP;
 
-            end loop;
+    FORALL i in 1..myszki.COUNT
+        INSERT INTO Myszy(nr_myszy, lowca, zjadacz, waga_myszy, data_zlowienia, data_wydania)
+        VALUES (myszy_seq.NEXTVAL, myszki(i).LOWCA, myszki(i).ZJADACZ, myszki(i).WAGA_MYSZY, myszki(i).DATA_ZLOWIENIA,
+                myszki(i).DATA_WYDANIA);
+END;
 
 
-    end loop;
-end;
+SELECT * FROM MYSZY;
+SELECT COUNT(nr_myszy) FROM Myszy; --200k
+--ostatnia środa miesiaca
+SELECT  * FROM Myszy WHERE EXTRACT(MONTH FROM Data_Zlowienia)=11 AND EXTRACT(YEAR FROM DATA_ZLOWIENIA)=2021;
+TRUNCATE TABLE MYSZY;
 
 
 
