@@ -531,6 +531,21 @@ DECLARE
     data_start DATE := '2004-01-01';
     data_ostatniej_srody DATE := NEXT_DAY(LAST_DAY(data_start) - 7), 'wednesday');
     data_koncowa DATE := '2022-01-18';
+    myszy_mies NUMBER(5);
+
+    TYPE tp IS TABLE OF Kocury.pseudo%TYPE;
+    tab_pseudo tp := tp();
+
+    TYPE tm IS TABLE OF NUMBER(4);
+    tab_myszy tm := tm();
+
+    TYPE myszy_rek IS TABLE OF Myszy%ROWTYPE INDEX BY BINARY_INTEGER;
+    myszki myszy_rek;
+
+    nr_myszy BINARY_INTEGER := 0;
+    indeks_zjadacza NUMBER(2);
+
+    lw NUMBER;
 
 BEGIN
     WHILE data_ostatniej_srody <= data_koncowa
@@ -540,6 +555,45 @@ BEGIN
         ELSE
             data_ostatniej_srody := LEAST(NEXT_DAY(LAST_DAY(ADD_MONTHS(data_start, 1)), 'wednesday') - 7, data_koncowa);
         END IF;
+
+        --pobranie danych w miesiacu
+        SELECT SUM(NVL(przydzial_myszy,0) + NVL(myszy_extra,0))
+        INTO myszy_mies FROM KOCURY WHERE W_STADKU_OD < data_ostatniej_srody;
+
+        --
+        SELECT pseudo, NVL(PRZYDZIAL_MYSZY, 0) + NVL(MYSZY_EXTRA,0)
+            BULK COLLECT INTO tab_pseudo, tab_myszy
+        FROM KOCURY WHERE W_STADKU_OD < data_ostatniej_srody;
+
+        indeks_zjadacza :=1;
+        myszy_mies := CEIL(myszy_mies/tab_pseudo.COUNT);
+
+        FOR i IN 1..(myszy_mies*tab_pseudo.COUNT)
+        LOOP
+            nr_myszy := nr_myszy + 1;
+            myszki(nr_myszy).NR_MYSZY := nr_myszy;
+            myszki(nr_myszy.).LOWCA := tab_pseudo(MOD(i, tab_pseudo.COUNT)+1);
+
+            IF data_ostatniej_srody != data_koncowa THEN
+                myszki(nr_myszy).DATA_WYDANIA := data_ostatniej_srody;
+
+                IF tab_myszy(indeks_zjadacza) = 0 THEN
+                    indeks_zjadacza := indeks_zjadacza +1;
+                ELSE
+                    tab_myszy(indeks_zjadacza) := tab_myszy(indeks_zjadacza)-1;
+                end if;
+
+                --nadwyzki
+                IF indeks_zjadacza > tab_myszy.COUNT THEN
+                    indeks_zjadacza := DBMS_RANDOM.VALUE(1, tab_myszy.COUNT);
+                end if;
+
+
+
+            end if;
+
+            end loop;
+
 
     end loop;
 end;
