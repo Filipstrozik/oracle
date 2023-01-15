@@ -15,7 +15,7 @@ DROP TYPE KontoO FORCE;
 DROP TYPE BODY IncydentO;
 DROP TYPE IncydentO FORCE;
 
-
+SET serveroutput ON;
 --zad47
 CREATE OR REPLACE TYPE KocuryO AS OBJECT
 (
@@ -350,7 +350,14 @@ SELECT DEREF(kot).info(), DEREF(slugus).get_details() FROM ELitaT;
 SELECT data_usuniecia, data_wprowadzenia, DEREF(kot).pseudo, DEREF(kot).get_sluga().get_details() FROM KONTOT;
 SELECT K.IMIE, K.PLEC, K.caly_przydzial() FROM KocuryT K WHERE K.caly_przydzial() > 90;
 --PODZAPYTANIE
+
 SELECT pseudo, plec FROM (SELECT K.pseudo pseudo, K.plec plec FROM KocuryT K WHERE K.PLEC = 'D');
+
+SELECT K.info() FROM KocuryT K WHERE K.caly_przydzial() <= (
+    SELECT AVG(K1.caly_przydzial())
+    FROM KocuryT K1
+    );
+
 --GRUPOWANIE
 SELECT K.funkcja, COUNT(K.pseudo) as koty_w_funkcji FROM KocuryT K GROUP BY K.funkcja;
 
@@ -362,6 +369,182 @@ SELECT E.kot.pseudo, E.kot.caly_przydzial()
 FROM KocuryT K JOIN ElitaT E  ON E.kot = REF(K);
 
 SELECT REF(T). FROM PlebsT T WHERE T.kot.plec = 'M';
+
+SELECT K.pseudo, data_wprowadzenia, data_usuniecia
+FROM KocuryT K JOIN ElitaT E ON REF(K) = E.kot LEFT JOIN KontoT ON REF(E) = KontoT.kot;
+
+--lista2 zad 18
+SELECT K2.imie, K2.w_stadku_od "POLUJE OD"
+FROM KocuryT K1
+         JOIN KocuryT K2
+              ON K1.imie = 'JACEK'
+WHERE K1.w_stadku_od > K2.w_stadku_od
+ORDER BY K2.w_stadku_od DESC;
+
+--lista2 zad 19a
+SELECT K.imie                                     "Imie",
+       K.funkcja                                  "Funkcja",
+       DEREF(K.szef).imie                         "Szef 1",
+       DEREF(DEREF(K.szef).szef).imie             "Szef 2",
+       DEREF(DEREF(DEREF(K.szef).szef).szef).imie "Szef 3"
+FROM KocuryT K
+WHERE K.funkcja IN ('KOT', 'MILUSIA');
+
+
+--lista2 zad 19c
+SELECT imie, funkcja, MAX(szefowie) "Imiona kolejnych szefow"
+FROM (SELECT CONNECT_BY_ROOT (imie)                          imie,
+             CONNECT_BY_ROOT (funkcja)                       funkcja,
+             REPLACE(SYS_CONNECT_BY_PATH(imie, ' | '), ' | ' || CONNECT_BY_ROOT IMIE || ' ' , '') szefowie
+      FROM KocuryT
+      CONNECT BY prior DEREF(szef).pseudo = pseudo
+      START WITH funkcja in ('KOT', 'MILUSIA'))
+GROUP BY imie, funkcja;
+
+--lista2 zad 22 --natural join laczy tabele wspolna kolumna ale zostawia tylko jedną, drugą pomija
+SELECT MIN(funkcja) "Funkcja", pseudo, COUNT(pseudo) "Liczba wrogow"
+FROM KocuryT
+         NATURAL JOIN INCYDENTYT
+GROUP BY pseudo
+HAVING COUNT(pseudo) > 1;
+
+--lista 2 zad 23
+SELECT imie, 12 * K.caly_przydzial() "DAWKA ROCZNA", 'powyzej 864' "DAWKA"
+FROM KocuryT K
+WHERE 12 * K.caly_przydzial() > 864
+  AND myszy_extra IS NOT NULL
+UNION
+SELECT imie, 12 * K.caly_przydzial() "DAWKA ROCZNA", '864' "DAWKA"
+FROM KocuryT K
+WHERE 12 * K.caly_przydzial() = 864
+  AND myszy_extra IS NOT NULL
+UNION
+SELECT imie, 12 * K.caly_przydzial() "DAWKA ROCZNA", 'ponizej 864' "DAWKA"
+FROM KocuryT K
+WHERE 12 * K.caly_przydzial() < 864
+  AND myszy_extra IS NOT NULL
+ORDER BY 2 DESC;
+
+--lista 3 zad 34
+DECLARE
+    funkcja_kocura KocuryT.funkcja%TYPE;
+BEGIN
+    SELECT FUNKCJA INTO funkcja_kocura
+    FROM KocuryT
+    WHERE FUNKCJA = UPPER('mui');
+--     DBMS_OUTPUT.PUT_LINE('Znaleziono kota o funkcji: ' || funkcja_kocura);
+EXCEPTION
+    WHEN TOO_MANY_ROWS
+        THEN DBMS_OUTPUT.PUT_LINE('znaleziono '|| funkcja_kocura);
+    WHEN NO_DATA_FOUND
+        THEN DBMS_OUTPUT.PUT_LINE('NIE znaleziono' || funkcja_kocura);
+END;
+
+--lista 3 zad37
+DECLARE
+    CURSOR topC IS
+        SELECT K.pseudo, K.caly_przydzial() "zjada"
+        FROM KocuryT K
+        ORDER BY "zjada" DESC;
+    top topC%ROWTYPE;
+BEGIN
+    OPEN topC;
+    DBMS_OUTPUT.PUT_LINE('Nr   Pseudonim   Zjada');
+    DBMS_OUTPUT.PUT_LINE('----------------------');
+    FOR i IN 1..5
+    LOOP
+        FETCH topC INTO top;
+        EXIT WHEN topC%NOTFOUND;
+        DBMS_OUTPUT.PUT_LINE(TO_CHAR(i) ||'    '|| RPAD(top.pseudo, 8) || '    ' || LPAD(TO_CHAR(top."zjada"), 5));
+    END LOOP;
+END;
+
+--lista 3 zad 38
+--TODO
+DECLARE
+    liczba_przelozonych     NUMBER := :liczba_przelozonych;
+    max_liczba_przelozonych NUMBER;
+    szerokosc_kol           NUMBER := 15;
+    pseudo_aktualny         KocuryT.PSEUDO%TYPE;
+    imie_aktualny           KocuryT.IMIE%TYPE;
+    pseudo_nastepny         DEREF(KocuryT.SZEF).pseudo%TYPE;
+    CURSOR podwladni IS SELECT PSEUDO, IMIE
+                        FROM KocuryT
+                        WHERE FUNKCJA IN ('MILUSIA', 'KOT');
+BEGIN
+    SELECT MAX(LEVEL) - 1
+    INTO max_liczba_przelozonych
+    FROM KocuryT
+    CONNECT BY PRIOR DEREF(szef).pseudo = pseudo
+    START WITH funkcja IN ('KOT', 'MILUSIA');
+    liczba_przelozonych := LEAST(max_liczba_przelozonych, liczba_przelozonych);
+
+    DBMS_OUTPUT.PUT(RPAD('IMIE ', szerokosc_kol));
+    FOR licznik IN 1..liczba_przelozonych
+        LOOP
+            DBMS_OUTPUT.PUT(RPAD('|  SZEF ' || licznik, szerokosc_kol));
+        END LOOP;
+    DBMS_OUTPUT.PUT_LINE('');
+    DBMS_OUTPUT.PUT_LINE(RPAD('-', szerokosc_kol * (liczba_przelozonych + 1), '-'));
+
+    FOR kot IN podwladni
+        LOOP
+            DBMS_OUTPUT.PUT(RPAD(KOT.IMIE, szerokosc_kol));
+            SELECT SZEF INTO pseudo_nastepny FROM KocuryT WHERE PSEUDO = kot.PSEUDO;
+            FOR COUNTER IN 1..liczba_przelozonych
+                LOOP
+                    IF pseudo_nastepny IS NULL THEN
+                        DBMS_OUTPUT.PUT(RPAD('|  ', szerokosc_kol));
+
+                    ELSE
+                        SELECT K.IMIE, K.PSEUDO, K.SZEF
+                        INTO imie_aktualny, pseudo_aktualny, pseudo_nastepny
+                        FROM KocuryT K
+                        WHERE K.PSEUDO = pseudo_nastepny;
+                        DBMS_OUTPUT.PUT(RPAD('|  ' || imie_aktualny, szerokosc_kol));
+                    END IF;
+                END LOOP;
+            DBMS_OUTPUT.PUT_LINE('');
+        END LOOP;
+END;
+
+
+
+
+--ZADANIE 49
+BEGIN
+    EXECUTE IMMEDIATE 'CREATE TABLE MYSZY(
+    nr_myszy NUMBER(7) CONSTRAINT myszy_pk PRIMARY KEY,
+    lowca VARCHAR2(15) CONSTRAINT m_lowca_fk REFERENCES Kocury(pseudo),
+    zjadacz VARCHAR2(15) CONSTRAINT m_zjadacz_fk REFERENCES Kocury(pseudo),
+    waga_myszy NUMBER(3) CONSTRAINT waga_myszy_ogr CHECK (waga_myszy BETWEEN 10 AND 85),
+    data_zlowienia DATE CONSTRAINT dat_nn NOT NULL,
+    data_wydania DATE,
+    CONSTRAINT daty_popr CHECK (data_zlowienia <= data_wydania))';
+END;
+
+DROP TABLE Myszy;
+ALTER SESSION SET NLS_DATE_FORMAT ='YYYY-MM-DD'
+
+
+DECLARE
+    data_start DATE := '2004-01-01';
+    data_ostatniej_srody DATE := NEXT_DAY(LAST_DAY(data_start) - 7), 'wednesday');
+    data_koncowa DATE := '2022-01-18';
+
+BEGIN
+    WHILE data_ostatniej_srody <= data_koncowa
+    LOOP
+        IF data_start < NEXT_DAY(LAST_DAY(data_start), 'wednesday') - 7 THEN
+            data_ostatniej_srody := LEAST(NEXT_DAY(LAST_DAY(data_start), 'wednesday') - 7, data_koncowa);
+        ELSE
+            data_ostatniej_srody := LEAST(NEXT_DAY(LAST_DAY(ADD_MONTHS(data_start, 1)), 'wednesday') - 7, data_koncowa);
+        END IF;
+
+    end loop;
+end;
+
+
 
 -- koty podzielone na dwie czesci, blokady trigger done
 -- nie wszystkie koty poluja od 2004 i nie mogą brac udziału przed 2004
