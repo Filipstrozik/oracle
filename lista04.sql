@@ -679,8 +679,8 @@ AS
     data_wyplaty DATE := NEXT_DAY(LAST_DAY(SYSDATE)-7, 'ŚRODA');
     TYPE tz IS TABLE OF Kocury.pseudo%TYPE INDEX BY BINARY_INTEGER;
         tab_zjadaczy tz;
-    TYPE td IS TABLE OF DATE;
-        tab_dat td;
+    TYPE tw IS TABLE OF Myszy%ROWTYPE;
+        tab_wierszy tw;
     liczba_najedzonych NUMBER(2) := 0;
     indeks_zjadacza NUMBER(2) := 1;
 BEGIN
@@ -718,19 +718,73 @@ BEGIN
         USING tab_zjadaczy(i), tab_nr(i);
 END;
 
+-- wow this works
+CREATE OR REPLACE PROCEDURE Wyplata2
+AS
+    TYPE tp IS TABLE OF Kocury.pseudo%TYPE;
+        tab_pseudo tp := tp();
+    TYPE tm is TABLE OF NUMBER(4);
+        tab_myszy tm := tm();
+    TYPE tn IS TABLE OF NUMBER(7);
+        tab_nr tn := tn();
+    TYPE tz IS TABLE OF Kocury.pseudo%TYPE INDEX BY BINARY_INTEGER;
+        tab_zjadaczy tz;
+    TYPE tw IS TABLE OF Myszy%ROWTYPE;
+        tab_wierszy tw;
+    liczba_najedzonych NUMBER(2) := 0;
+    indeks_zjadacza NUMBER(2) := 1;
+BEGIN
+    --wedlug hierarchi
+    SELECT pseudo, NVL(przydzial_myszy,0) + NVL(myszy_extra, 0)
+        BULK COLLECT INTO tab_pseudo, tab_myszy
+    FROM Kocury CONNECT BY PRIOR pseudo = szef
+    START WITH SZEF IS NULL
+    ORDER BY level;
+
+    SELECT *
+        BULK COLLECT INTO tab_wierszy
+    FROM Myszy
+    WHERE DATA_WYDANIA IS NULL;
+
+    FOR i IN 1..tab_wierszy.COUNT
+        LOOP
+            WHILE tab_myszy(indeks_zjadacza) = 0 AND liczba_najedzonych < tab_pseudo.COUNT
+                LOOP
+                    liczba_najedzonych := liczba_najedzonych + 1;
+                    indeks_zjadacza := MOD(indeks_zjadacza + 1, tab_pseudo.COUNT) + 1;
+                END LOOP;
+            --jezeli wszyscy juz dostali to daj szefowi nad szefami
+            IF liczba_najedzonych = tab_pseudo.COUNT THEN
+                tab_zjadaczy(i) := 'TYGRYS';
+            ELSE
+                indeks_zjadacza := MOD(indeks_zjadacza + 1, tab_pseudo.COUNT) + 1;
+                tab_zjadaczy(i) := tab_pseudo(indeks_zjadacza);
+                tab_myszy(indeks_zjadacza) := tab_myszy(indeks_zjadacza) - 1;
+            end if;
+        END LOOP;
+    FORALL i IN 1..tab_wierszy.COUNT
+            UPDATE Myszy SET data_wydania=NEXT_DAY(LAST_DAY(tab_wierszy(i).DATA_ZLOWIENIA)-7, 'ŚRODA'), zjadacz=tab_zjadaczy(i)
+            WHERE nr_myszy=tab_wierszy(i).NR_MYSZY;
+END;
+
+
 BEGIN
     Wyplata();
 END;
 
+BEGIN
+    Wyplata2();
+END;
+
 INSERT INTO Myszy_kota_DAMA VALUES(myszy_seq.nextval, 60, '2022-12-19');
 
-INSERT INTO MYSZY_KOTA_TYGRYS VALUES(myszy_seq.nextval, 69, '2022-12-28');
+INSERT INTO MYSZY_KOTA_TYGRYS VALUES(myszy_seq.nextval, 69, '2022-12-27');
 BEGIN
     przyjmij_na_stan('Dama', '2022-12-19');
 end;
 
 BEGIN
-    przyjmij_na_stan('TYGRYS', '2022-12-28');
+    przyjmij_na_stan('TYGRYS', '2022-12-27');
 end;
 
 SELECT * FROM MYSZY_KOTA_TYGRYS;
@@ -741,8 +795,11 @@ SELECT COUNT(*) FROM Myszy WHERE EXTRACT(YEAR FROM data_wydania)=2022 AND zjadac
 SELECT * FROM Myszy WHERE data_wydania IS NULL;
 SELECT * FROM MYSZY WHERE NR_MYSZY = 216321;
 
-SELECT * FROM MYSZY WHERE NR_MYSZY = 216323;
+SELECT * FROM MYSZY WHERE NR_MYSZY = 216361;
 SELECT * FROM MYSZY_KOTA_TYGRYS;
+
+
+
 
 
 --TODO znajdz ostatnią srode miesiaca w miesiacy zlowienia myszy i w wyplacie trzymaj sie tej daty ostatniej srody.
