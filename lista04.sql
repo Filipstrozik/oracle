@@ -539,6 +539,7 @@ END;
 SELECT * FROM MYSZY;
 
 DROP TABLE Myszy;
+TRUNCATE TABLE Myszy;
 ALTER SESSION SET NLS_DATE_FORMAT ='YYYY-MM-DD'
 
 CREATE SEQUENCE myszy_seq;
@@ -564,6 +565,7 @@ DECLARE
 BEGIN
     LOOP
         EXIT WHEN data_start >= data_koncowa;
+            --zadbanie o dobrą date
             IF data_start < NEXT_DAY(LAST_DAY(data_start), 'ŚRODA') - 7 THEN
                 data_ostatniej_srody := LEAST(NEXT_DAY(LAST_DAY(data_start), 'ŚRODA') - 7, data_koncowa);
             ELSE
@@ -571,20 +573,21 @@ BEGIN
                         LEAST(NEXT_DAY(LAST_DAY(ADD_MONTHS(data_start, 1)), 'ŚRODA') - 7, data_koncowa);
             END IF;
 
-            --pobranie danych w miesiacu
+            --pobbranie sumy przydzialu dla kotow ktore wtedy byly juz w stadku
             SELECT SUM(NVL(przydzial_myszy, 0) + NVL(myszy_extra, 0))
             INTO myszy_mies
             FROM KOCURY
             WHERE W_STADKU_OD < data_ostatniej_srody;
 
-            --
+            -- pobranie pseudonimow oraz przydzialu myszy do odp tabel
             SELECT pseudo,
-                   NVL(PRZYDZIAL_MYSZY, 0) + NVL(MYSZY_EXTRA, 0) BULK COLLECT
-            INTO tab_pseudo, tab_myszy
+                   NVL(PRZYDZIAL_MYSZY, 0) + NVL(MYSZY_EXTRA, 0)
+                   BULK COLLECT INTO tab_pseudo, tab_myszy
             FROM KOCURY
             WHERE W_STADKU_OD < data_ostatniej_srody;
 
             indeks_zjadacza := 1;
+            --ile przypada dla kazdego kotka
             myszy_mies := CEIL(myszy_mies / tab_pseudo.COUNT);
 
             FOR i IN 1..(myszy_mies * tab_pseudo.COUNT)
@@ -593,16 +596,18 @@ BEGIN
                     myszki(nr_myszy).NR_MYSZY := nr_myszy;
                     myszki(nr_myszy).LOWCA := tab_pseudo(MOD(i, tab_pseudo.COUNT) + 1);
 
+
                     IF data_ostatniej_srody != data_koncowa THEN
                         myszki(nr_myszy).DATA_WYDANIA := data_ostatniej_srody;
 
+                        --przydzial myszy zgdonie z dołączeniem oraz z przydzialem mysz
                         IF tab_myszy(indeks_zjadacza) = 0 THEN
                             indeks_zjadacza := indeks_zjadacza + 1;
                         ELSE
                             tab_myszy(indeks_zjadacza) := tab_myszy(indeks_zjadacza) - 1;
                         end if;
 
-                        --nadwyzki
+                        --nadwyzki losowo
                         IF indeks_zjadacza > tab_myszy.COUNT THEN
                             indeks_zjadacza := DBMS_RANDOM.VALUE(1, tab_myszy.COUNT);
                         end if;
@@ -623,12 +628,14 @@ BEGIN
         VALUES (myszy_seq.NEXTVAL, myszki(i).LOWCA, myszki(i).ZJADACZ, myszki(i).WAGA_MYSZY, myszki(i).DATA_ZLOWIENIA,
                 myszki(i).DATA_WYDANIA);
 END;
-
+-- trunc() - trunc() roznica miedzy datami (number)
 
 SELECT * FROM MYSZY;
 SELECT COUNT(nr_myszy) FROM Myszy; --200k
+SELECT COUNT(nr_myszy), ZJADACZ FROM Myszy GROUP BY ZJADACZ; --200k
+SELECT * FROM Kocury;
 --ostatnia środa miesiaca
-SELECT  * FROM Myszy WHERE EXTRACT(MONTH FROM Data_Zlowienia)=11 AND EXTRACT(YEAR FROM DATA_ZLOWIENIA)=2021;
+SELECT  * FROM Myszy WHERE EXTRACT(MONTH FROM Data_Zlowienia)=1 AND EXTRACT(YEAR FROM DATA_ZLOWIENIA)=2023;
 TRUNCATE TABLE MYSZY;
 
 BEGIN
@@ -880,8 +887,6 @@ SELECT * FROM MYSZY ORDER BY 5 DESC;
 
 
 
-
-
 -- znajdz ostatnią srode miesiaca w miesiacy zlowienia myszy i w wyplacie trzymaj sie tej daty ostatniej srody.
 -- czy uniemozliwic wyplate w przyszlosc?
 
@@ -893,4 +898,5 @@ SELECT * FROM MYSZY ORDER BY 5 DESC;
 
 --zadanie 3 wydajnosc kiladziesiat tysiecy krotek w 2 sekundy 5-7 sekund tez okey.
 -- bulk przygotowac i raz wysłać do serwera
-
+--
+SELECT TRUNC(SYSDATE) - TRUNC(LAST_DAY(SYSDATE))  FROM DUAL;
