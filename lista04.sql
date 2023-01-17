@@ -646,26 +646,27 @@ AS
     ile_kotow NUMBER(2);
     nie_ma_kota EXCEPTION;
     zla_data EXCEPTION;
+    brak_myszy_o_dacie EXCEPTION;
 BEGIN
     IF data_zlowienia > SYSDATE THEN RAISE zla_data; END IF;
 
     SELECT COUNT(K.pseudo) INTO ile_kotow FROM KOCURY K  WHERE K.pseudo = UPPER(kotPseudo);
     IF ile_kotow = 0 THEN RAISE nie_ma_kota; END IF;
 
-    DBMS_OUTPUT.PUT_LINE('test1');
     EXECUTE IMMEDIATE 'SELECT nr_myszy, waga_myszy FROM Myszy_kota_'|| kotPseudo || ' WHERE data_zlowienia= ''' || data_zlowienia || ''''
         BULK COLLECT INTO tab_nr, tab_wagi;
+    IF tab_nr.COUNT = 0 THEN
+        RAISE brak_myszy_o_dacie;
+    end if;
 
-    DBMS_OUTPUT.PUT_LINE('test2');
     FORALL i in 1..tab_nr.COUNT
         INSERT INTO Myszy VALUES (tab_nr(i), UPPER(kotPseudo), NULL, tab_wagi(i),DATA_ZLOWIENIA, NULL);
 
-    DBMS_OUTPUT.PUT_LINE('test3');
     EXECUTE IMMEDIATE 'DELETE FROM Myszy_kota_' || kotPseudo || ' WHERE data_zlowienia= ''' || data_zlowienia || '''';
-    DBMS_OUTPUT.PUT_LINE('test4');
     EXCEPTION
         WHEN nie_ma_kota THEN DBMS_OUTPUT.PUT_LINE('BRAK KOTA O PSEUDONIMIE Myszy_kota_'|| UPPER(kotPseudo));
         WHEN zla_data THEN DBMS_OUTPUT.PUT_LINE('ZLA DATA');
+        WHEN brak_myszy_o_dacie THEN DBMS_OUTPUT.PUT_LINE('BRAK MYSZY W ZLOWIONEJ DACIE');
 END;
 
 CREATE OR REPLACE PROCEDURE Wyplata
@@ -767,25 +768,92 @@ BEGIN
             WHERE nr_myszy=tab_wierszy(i).NR_MYSZY;
 END;
 
+CREATE OR REPLACE PROCEDURE Wyplata3
+AS
+    TYPE tp IS TABLE OF Kocury.pseudo%TYPE;
+        tab_pseudo tp := tp();
+    TYPE tm is TABLE OF NUMBER(4);
+        tab_myszy tm := tm();
+    TYPE tn IS TABLE OF NUMBER(7);
+        tab_nr tn := tn();
+    TYPE tz IS TABLE OF Kocury.pseudo%TYPE INDEX BY BINARY_INTEGER;
+        tab_zjadaczy tz;
+    TYPE tw IS TABLE OF Myszy%ROWTYPE;
+        tab_wierszy tw;
+    liczba_najedzonych NUMBER(2) := 0;
+    indeks_zjadacza NUMBER(2) := 1;
+BEGIN
+    --wedlug hierarchi
+    SELECT pseudo, NVL(przydzial_myszy,0) + NVL(myszy_extra, 0)
+        BULK COLLECT INTO tab_pseudo, tab_myszy
+    FROM Kocury CONNECT BY PRIOR pseudo = szef
+    START WITH SZEF IS NULL
+    ORDER BY level;
+
+    SELECT *
+        BULK COLLECT INTO tab_wierszy
+    FROM Myszy
+    WHERE DATA_WYDANIA IS NULL;
+
+    FOR i IN 1..tab_wierszy.COUNT
+        LOOP
+            WHILE tab_myszy(indeks_zjadacza) = 0 AND liczba_najedzonych < tab_pseudo.COUNT
+                LOOP
+                    liczba_najedzonych := liczba_najedzonych + 1;
+                    indeks_zjadacza := MOD(indeks_zjadacza + 1, tab_pseudo.COUNT) + 1;
+                END LOOP;
+            --jezeli wszyscy juz dostali to daj szefowi nad szefami
+            IF liczba_najedzonych = tab_pseudo.COUNT THEN
+                tab_zjadaczy(i) := 'TYGRYS';
+            ELSE
+                indeks_zjadacza := MOD(indeks_zjadacza + 1, tab_pseudo.COUNT) + 1;
+                tab_zjadaczy(i) := tab_pseudo(indeks_zjadacza);
+                tab_myszy(indeks_zjadacza) := tab_myszy(indeks_zjadacza) - 1;
+            end if;
+
+            IF NEXT_DAY(LAST_DAY(tab_wierszy(i).DATA_ZLOWIENIA)-7, 'ŚRODA') < tab_wierszy(i).DATA_ZLOWIENIA THEN
+                tab_wierszy(i).DATA_WYDANIA := NEXT_DAY(LAST_DAY(ADD_MONTHS(tab_wierszy(i).DATA_ZLOWIENIA,1))-7, 'ŚRODA');
+            ELSE
+                tab_wierszy(i).DATA_WYDANIA := NEXT_DAY(LAST_DAY(tab_wierszy(i).DATA_ZLOWIENIA)-7, 'ŚRODA');
+            end if;
+        END LOOP;
+    FORALL i IN 1..tab_wierszy.COUNT
+            UPDATE Myszy SET data_wydania=tab_wierszy(i).DATA_WYDANIA , zjadacz=tab_zjadaczy(i)
+            WHERE nr_myszy=tab_wierszy(i).NR_MYSZY;
+END;
+
 
 BEGIN
     Wyplata();
 END;
 
-BEGIN
-    Wyplata2();
-END;
+
 
 INSERT INTO Myszy_kota_DAMA VALUES(myszy_seq.nextval, 60, '2022-12-19');
 
-INSERT INTO MYSZY_KOTA_TYGRYS VALUES(myszy_seq.nextval, 69, '2022-12-27');
+INSERT INTO MYSZY_KOTA_TYGRYS VALUES(myszy_seq.nextval, 69, '2022-12-01');
+INSERT INTO MYSZY_KOTA_TYGRYS VALUES(myszy_seq.nextval, 29, '2022-12-01');
+INSERT INTO MYSZY_KOTA_TYGRYS VALUES(myszy_seq.nextval, 78, '2022-12-20');
+INSERT INTO MYSZY_KOTA_TYGRYS VALUES(myszy_seq.nextval, 78, '2022-12-30');
+INSERT INTO MYSZY_KOTA_TYGRYS VALUES(myszy_seq.nextval, 28, '2022-12-30');
 BEGIN
     przyjmij_na_stan('Dama', '2022-12-19');
 end;
 
 BEGIN
+    przyjmij_na_stan('TYGRYS', '2022-12-01');
+    przyjmij_na_stan('TYGRYS', '2022-12-20');
     przyjmij_na_stan('TYGRYS', '2022-12-27');
+    przyjmij_na_stan('TYGRYS', '2022-12-30');
 end;
+
+BEGIN
+    Wyplata2();
+END;
+
+BEGIN
+    Wyplata3();
+END;
 
 SELECT * FROM MYSZY_KOTA_TYGRYS;
 
@@ -797,12 +865,14 @@ SELECT * FROM MYSZY WHERE NR_MYSZY = 216321;
 
 SELECT * FROM MYSZY WHERE NR_MYSZY = 216361;
 SELECT * FROM MYSZY_KOTA_TYGRYS;
+SELECT * FROM MYSZY ORDER BY 5 DESC;
 
 
 
 
 
---TODO znajdz ostatnią srode miesiaca w miesiacy zlowienia myszy i w wyplacie trzymaj sie tej daty ostatniej srody.
+-- znajdz ostatnią srode miesiaca w miesiacy zlowienia myszy i w wyplacie trzymaj sie tej daty ostatniej srody.
+-- czy uniemozliwic wyplate w przyszlosc?
 
 -- koty podzielone na dwie czesci, blokady trigger done
 -- nie wszystkie koty poluja od 2004 i nie mogą brac udziału przed 2004
