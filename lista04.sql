@@ -16,7 +16,7 @@ DROP TYPE BODY IncydentO;
 DROP TYPE IncydentO FORCE;
 
 SET serveroutput ON;
---zad47
+--zad47 ----------------------------------------------------------------------------------
 CREATE OR REPLACE TYPE KocuryO AS OBJECT
 (
     imie            VARCHAR2(15),
@@ -390,6 +390,17 @@ SELECT K.imie                                     "Imie",
 FROM KocuryT K
 WHERE K.funkcja IN ('KOT', 'MILUSIA');
 
+--lista2 zad19b
+SELECT *
+FROM (SELECT CONNECT_BY_ROOT K.imie "Imie", DEREF(K.szef).imie szef, CONNECT_BY_ROOT K.funkcja "Funkcja", LEVEL AS "LEV"
+      FROM KocuryT K
+      CONNECT BY PRIOR DEREF(szef).pseudo = pseudo
+      START WITH funkcja IN ('KOT','MILUSIA'))
+PIVOT (
+    MIN(szef)
+    FOR LEV
+    IN (2 "Szef 1", 3 "Szef 2", 4 "Szef 3")
+    );
 
 --lista2 zad 19c
 SELECT imie, funkcja, MAX(szefowie) "Imiona kolejnych szefow"
